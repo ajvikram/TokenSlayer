@@ -1,0 +1,676 @@
+/* ═══════════════════════════════════════════════════════
+   TokenSlayer Dashboard — Premium Sidebar Styles
+   Theme-aware using VS Code CSS variables
+   ═══════════════════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.dashboard {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── Hero Section ───────────────────────────────────── */
+
+.hero {
+  text-align: center;
+  padding: 20px 12px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--vscode-button-background) 15%, transparent),
+    color-mix(in srgb, var(--vscode-button-background) 5%, transparent)
+  );
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--vscode-button-background) 25%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle at 30% 50%,
+    color-mix(in srgb, var(--vscode-button-background) 8%, transparent),
+    transparent 60%
+  );
+  animation: heroGlow 6s ease-in-out infinite alternate;
+}
+
+@keyframes heroGlow {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(5%, -5%); }
+}
+
+.hero-icon {
+  font-size: 28px;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.hero-number {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(
+    135deg,
+    var(--vscode-button-foreground, #fff),
+    color-mix(in srgb, var(--vscode-button-background) 70%, var(--vscode-button-foreground, #fff))
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  opacity: 0.7;
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Stats Grid ─────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-card {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-widget-border, color-mix(in srgb, var(--vscode-foreground) 12%, transparent));
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--vscode-button-background);
+  transform: translateY(-1px);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--vscode-foreground);
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+/* ─── Section ────────────────────────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ─── Coverage Ring ──────────────────────────────────── */
+
+.coverage-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 4px;
+}
+
+.coverage-ring-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.coverage-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-bg {
+  fill: none;
+  stroke: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+  stroke-width: 6;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: #00c878;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.coverage-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.coverage-percent {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.coverage-sub {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.5;
+}
+
+.coverage-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coverage-stat {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-green { background: #00c878; }
+.dot-red { background: #f44; }
+
+/* ─── Donut Chart ────────────────────────────────────── */
+
+.donut-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto;
+}
+
+.donut {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.donut-bg {
+  fill: none;
+  stroke: color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+  stroke-width: 8;
+}
+
+.donut-fill {
+  fill: none;
+  stroke: var(--vscode-button-background);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.donut-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.donut-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.5;
+}
+
+.savings-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  opacity: 0.5;
+}
+
+/* ─── Language Breakdown ─────────────────────────────── */
+
+.lang-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lang-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.lang-icon {
+  font-size: 12px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lang-name {
+  width: 28px;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.lang-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lang-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--vscode-button-background), #00c878);
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lang-value {
+  font-size: 10px;
+  opacity: 0.6;
+  width: 45px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ─── Timeline ───────────────────────────────────────── */
+
+.timeline-container {
+  background: var(--vscode-editor-background);
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+#timelineCanvas {
+  width: 100%;
+  height: 50px;
+  display: block;
+}
+
+/* ─── Top Savers ─────────────────────────────────────── */
+
+.top-savers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saver-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  border-radius: 6px;
+  font-size: 11px;
+  transition: border-color 0.15s ease;
+}
+
+.saver-row:hover {
+  border-color: var(--vscode-button-background);
+}
+
+.saver-rank {
+  font-size: 12px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.saver-name {
+  flex: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saver-saved {
+  font-size: 10px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* ─── Activity List ──────────────────────────────────── */
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.activity-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.activity-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--vscode-foreground) 20%, transparent);
+  border-radius: 2px;
+}
+
+.activity-item {
+  padding: 8px 10px;
+  background: var(--vscode-editor-background);
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.activity-item:hover {
+  background: var(--vscode-list-hoverBackground);
+  border-color: var(--vscode-button-background);
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.activity-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70%;
+}
+
+.activity-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--vscode-button-background) 20%, transparent);
+  color: var(--vscode-button-background);
+}
+
+.activity-detail {
+  font-size: 10px;
+  opacity: 0.6;
+  display: flex;
+  justify-content: space-between;
+}
+
+.activity-time {
+  white-space: nowrap;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 16px 10px;
+  opacity: 0.5;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.empty-state-small {
+  text-align: center;
+  padding: 8px 6px;
+  opacity: 0.4;
+  font-size: 10px;
+}
+
+/* ─── Excluded Files (Secrets Protection) ────────────── */
+
+.severity-summary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sev-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.sev-high {
+  background: color-mix(in srgb, #f44 15%, transparent);
+  color: #f66;
+}
+
+.sev-medium {
+  background: color-mix(in srgb, #fb0 15%, transparent);
+  color: #fc3;
+}
+
+.sev-low {
+  background: color-mix(in srgb, #4a4 15%, transparent);
+  color: #6c6;
+}
+
+.excluded-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--vscode-errorForeground, #f44) 15%, transparent);
+  color: var(--vscode-errorForeground, #f44);
+  min-width: 18px;
+  text-align: center;
+}
+
+.excluded-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.excluded-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.excluded-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--vscode-foreground) 20%, transparent);
+  border-radius: 2px;
+}
+
+.excluded-item {
+  padding: 8px 10px;
+  background: var(--vscode-editor-background);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  transition: border-color 0.15s ease;
+}
+
+.excluded-item.severity-high { border-left: 3px solid #f44; }
+.excluded-item.severity-medium { border-left: 3px solid #fb0; }
+.excluded-item.severity-low { border-left: 3px solid #4a4; }
+
+.excluded-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.excluded-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.excluded-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.excluded-severity {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.severity-high .excluded-severity {
+  background: color-mix(in srgb, #f44 18%, transparent);
+  color: #f66;
+}
+
+.severity-medium .excluded-severity {
+  background: color-mix(in srgb, #fb0 18%, transparent);
+  color: #fc3;
+}
+
+.severity-low .excluded-severity {
+  background: color-mix(in srgb, #4a4 18%, transparent);
+  color: #6c6;
+}
+
+.excluded-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 3px;
+}
+
+.excluded-reason {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  opacity: 0.8;
+}
+
+.excluded-time {
+  font-size: 9px;
+  opacity: 0.4;
+}
+
+.secure-state {
+  opacity: 0.6;
+  color: #6c6;
+}
+
+/* ─── Actions ────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.btn-export {
+  background: color-mix(in srgb, var(--vscode-button-background) 15%, transparent);
+  color: var(--vscode-button-foreground, var(--vscode-foreground));
+  border: 1px solid color-mix(in srgb, var(--vscode-button-background) 30%, transparent);
+}
+
+.btn-danger {
+  background: color-mix(in srgb, var(--vscode-errorForeground, #f44) 15%, transparent);
+  color: var(--vscode-errorForeground, #f44);
+  border: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f44) 30%, transparent);
+}

@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ─── Code Quality ──────────────────────────────────────────────────
+  code-check:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Lint check
+        run: npm run lint --if-present
+        continue-on-error: true
+
+  # ─── Build ─────────────────────────────────────────────────────────
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    needs: code-check
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Verify output
+        run: |
+          test -f out/extension.js || (echo "❌ extension.js not found" && exit 1)
+          echo "✅ Build output verified"
+
+  # ─── Security ──────────────────────────────────────────────────────
+  security:
+    name: 🛡️ Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: NPM audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Check for secrets in source
+        run: |
+          echo "🔍 Scanning for hardcoded secrets..."
+          FOUND=0
+          # Check for common secret patterns
+          grep -rn "AKIA[0-9A-Z]\{16\}" src/ && FOUND=1 || true
+          grep -rn "-----BEGIN.*PRIVATE KEY-----" src/ && FOUND=1 || true
+          grep -rn "sk_live_" src/ && FOUND=1 || true
+          grep -rn "ghp_[A-Za-z0-9]\{36\}" src/ && FOUND=1 || true
+          if [ "$FOUND" -eq 1 ]; then
+            echo "❌ Potential secrets found in source code!"
+            exit 1
+          fi
+          echo "✅ No secrets detected in source"
+
+      - name: License compliance check
+        run: |
+          echo "📋 Checking dependency licenses..."
+          npx license-checker --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" --excludePrivatePackages || true
+          echo "✅ License check complete"
+
+  # ─── Package ───────────────────────────────────────────────────────
+  package:
+    name: 📦 Package VSIX
+    runs-on: ubuntu-latest
+    needs: [build, security]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package extension
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenslayer-vsix
+          path: '*.vsix'
+          retention-days: 30
+
+      - name: Report package size
+        run: |
+          VSIX=$(ls *.vsix)
+          SIZE=$(du -h "$VSIX" | cut -f1)
+          echo "📦 Package: $VSIX ($SIZE)"
+          echo "### 📦 VSIX Package" >> $GITHUB_STEP_SUMMARY
+          echo "- **File:** $VSIX" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size:** $SIZE" >> $GITHUB_STEP_SUMMARY

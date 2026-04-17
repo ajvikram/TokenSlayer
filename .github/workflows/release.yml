@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 🚀 Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --no-dependencies --allow-missing-repository
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VSIX=$(ls *.vsix)
+          SIZE=$(du -h "$VSIX" | cut -f1)
+          cat << 'NOTES' > release_notes.md
+          ## ⚡ TokenSlayer ${{ steps.version.outputs.VERSION }}
+
+          ### Installation
+          1. Download the `.vsix` file below
+          2. In VS Code: `Cmd+Shift+P` → `Extensions: Install from VSIX...`
+          3. Select the downloaded file
+
+          ### Requirements
+          - VS Code 1.93+
+          - GitHub Copilot Chat (for LM Tool integration)
+
+          ### What's Included
+          - 🧠 Semantic structural cache with 40-95% token reduction
+          - 🔧 Copilot LM Tool integration (`#tokenslayer-structural-summary`)
+          - 📊 Premium sidebar dashboard with real-time stats
+          - 🛡️ Automatic secrets detection & exclusion
+          - ⚡ Inline CodeLens indicators
+          - 📂 File Explorer badges
+          - 🌐 Language support: TypeScript, JavaScript, Python, Go, Java, Rust
+          NOTES
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.vsix'
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

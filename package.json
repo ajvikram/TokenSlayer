@@ -1,0 +1,173 @@
+{
+  "name": "tokenslayer",
+  "displayName": "TokenSlayer",
+  "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
+  "version": "0.1.0",
+  "publisher": "tokenslayer",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "tokens",
+    "ast",
+    "cache",
+    "skeleton",
+    "context"
+  ],
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tokenslayer.analyzeWorkspace",
+        "title": "TokenSlayer: Analyze Workspace",
+        "icon": "$(search-fuzzy)"
+      },
+      {
+        "command": "tokenslayer.analyzeFile",
+        "title": "TokenSlayer: Analyze Current File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "tokenslayer.showDashboard",
+        "title": "TokenSlayer: Show Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "tokenslayer.clearCache",
+        "title": "TokenSlayer: Clear Cache",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "tokenslayer.showSkeleton",
+        "title": "TokenSlayer: Preview Skeleton",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "tokenslayer.exportReport",
+        "title": "TokenSlayer: Export Savings Report",
+        "icon": "$(markdown)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tokenslayer-sidebar",
+          "title": "TokenSlayer",
+          "icon": "$(zap)"
+        }
+      ]
+    },
+    "views": {
+      "tokenslayer-sidebar": [
+        {
+          "type": "webview",
+          "id": "tokenslayer.dashboardView",
+          "name": "Dashboard"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "name": "tokenslayer-structural-summary",
+        "displayName": "Structural Summary",
+        "tags": [
+          "code-structure",
+          "architecture",
+          "navigation"
+        ],
+        "modelDescription": "Get a compact structural summary of source code files including class hierarchies, function signatures, and type relationships. Use this tool instead of reading raw files when you need to understand code architecture, find where things are defined, or navigate large codebases. Returns compressed AST skeletons that capture the structure without implementation details, saving 40-95% of tokens compared to reading raw files.",
+        "userDescription": "Analyzes source code and returns a compact structural skeleton with class hierarchies, function signatures, and type relationships — saving 40-95% of tokens.",
+        "icon": "$(symbol-structure)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Absolute or workspace-relative path to analyze. If omitted, analyzes the active editor file."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "file",
+                "directory",
+                "workspace"
+              ],
+              "description": "Scope of analysis. 'file' for a single file, 'directory' for all files in a directory, 'workspace' for the full workspace. Defaults to 'file'."
+            },
+            "verbosity": {
+              "type": "string",
+              "enum": [
+                "minimal",
+                "standard",
+                "detailed"
+              ],
+              "description": "Level of detail. 'minimal' = signatures only. 'standard' = signatures + first-line docs. 'detailed' = signatures + docs + imports. Defaults to 'standard'."
+            }
+          }
+        },
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "tokenslayer-structural-summary"
+      }
+    ],
+    "configuration": {
+      "title": "TokenSlayer",
+      "properties": {
+        "tokenslayer.maxFileSizeKB": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum file size (KB) to analyze. Files larger than this are skipped."
+        },
+        "tokenslayer.ignoredPaths": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/out/**",
+            "**/.git/**",
+            "**/vendor/**",
+            "**/__pycache__/**"
+          ],
+          "description": "Glob patterns for paths to exclude from analysis."
+        },
+        "tokenslayer.cacheMaxEntries": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum number of cached skeletons before LRU eviction."
+        },
+        "tokenslayer.verbosity": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "detailed"
+          ],
+          "default": "standard",
+          "description": "Default verbosity for skeleton generation."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.93.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.5.0"
+  }
+}

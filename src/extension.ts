@@ -1,0 +1,370 @@
+import * as vscode from 'vscode';
+import { CacheManager } from './cache/cacheManager';
+import { StructuralSummaryTool } from './tools/structuralSummaryTool';
+import { DashboardProvider } from './views/dashboardProvider';
+import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
+import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
+import { TokenSlayerFileDecorationProvider } from './views/fileDecorationProvider';
+import { SymbolExtractor } from './extraction/symbolExtractor';
+import { SkeletonBuilder } from './extraction/skeletonBuilder';
+import { CompactorFactory } from './compaction/compactor';
+import { TokenEstimator } from './utils/tokenEstimator';
+import { Logger } from './utils/logger';
+import { Verbosity } from './types';
+
+const logger = Logger.getInstance();
+
+let statusBarItem: vscode.StatusBarItem;
+let cacheManager: CacheManager;
+let dashboardProvider: DashboardProvider;
+
+/**
+ * Extension activation entry point.
+ */
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  logger.info('TokenSlayer activating...');
+
+  // ─── 1. Initialize Cache ────────────────────────────────────────────────
+  cacheManager = new CacheManager(context);
+  await cacheManager.initialize();
+
+  // ─── 2. Register LM Tool ───────────────────────────────────────────────
+  const structuralSummaryTool = new StructuralSummaryTool(cacheManager);
+  context.subscriptions.push(
+    vscode.lm.registerTool('tokenslayer-structural-summary', structuralSummaryTool)
+  );
+  logger.info('Registered LM tool: tokenslayer-structural-summary');
+
+  // ─── 3. Register Dashboard View ─────────────────────────────────────────
+  dashboardProvider = new DashboardProvider(context.extensionUri, cacheManager);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      DashboardProvider.viewType,
+      dashboardProvider
+    )
+  );
+
+  // ─── 4. Register Skeleton Preview Provider ──────────────────────────────
+  const skeletonPreviewProvider = new SkeletonPreviewProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(
+      SkeletonPreviewProvider.scheme,
+      skeletonPreviewProvider
+    )
+  );
+
+  // ─── 5. Register Commands ──────────────────────────────────────────────
+
+  // Analyze Workspace
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.analyzeWorkspace', async () => {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'TokenSlayer: Analyzing workspace...',
+          cancellable: true,
+        },
+        async (progress, token) => {
+          const tool = new StructuralSummaryTool(cacheManager);
+          const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+          if (!workspaceFolder) {
+            vscode.window.showWarningMessage('No workspace folder open');
+            return;
+          }
+
+          const config = vscode.workspace.getConfiguration('tokenslayer');
+          const verbosity: Verbosity = config.get<Verbosity>('verbosity', 'standard');
+
+          // Find all supported files
+          const files = await vscode.workspace.findFiles(
+            '**/*.{ts,tsx,js,jsx,py,go,java,rs}',
+            `{${config.get<string[]>('ignoredPaths', []).join(',')}}`,
+            200
+          );
+
+          let analyzed = 0;
+          for (const file of files) {
+            if (token.isCancellationRequested) { break; }
+            progress.report({
+              message: `${analyzed}/${files.length} files...`,
+              increment: (1 / files.length) * 100,
+            });
+
+            await tool.analyzeFile(file.fsPath, verbosity, token);
+            analyzed++;
+          }
+
+          const savings = cacheManager.getSavings();
+          updateStatusBar(savings.totalSaved);
+          dashboardProvider.updateDashboard();
+
+          vscode.window.showInformationMessage(
+            `TokenSlayer: Analyzed ${analyzed} files — ${TokenEstimator.formatCount(savings.totalSaved)} tokens saved (${savings.reductionPercent}% reduction)`
+          );
+        }
+      );
+    })
+  );
+
+  // Analyze Current File
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.analyzeFile', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showWarningMessage('No active editor');
+        return;
+      }
+
+      const tool = new StructuralSummaryTool(cacheManager);
+      const config = vscode.workspace.getConfiguration('tokenslayer');
+      const verbosity: Verbosity = config.get<Verbosity>('verbosity', 'standard');
+
+      const tokenSource = new vscode.CancellationTokenSource();
+      const skeleton = await tool.analyzeFile(
+        editor.document.uri.fsPath,
+        verbosity,
+        tokenSource.token
+      );
+      tokenSource.dispose();
+
+      const savings = cacheManager.getSavings();
+      updateStatusBar(savings.totalSaved);
+      dashboardProvider.updateDashboard();
+
+      const fileName = editor.document.uri.fsPath.split(/[/\\]/).pop();
+      vscode.window.showInformationMessage(
+        `TokenSlayer: ${fileName} analyzed — ${savings.reductionPercent}% token reduction`
+      );
+    })
+  );
+
+  // Show Dashboard
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.showDashboard', () => {
+      vscode.commands.executeCommand('tokenslayer.dashboardView.focus');
+    })
+  );
+
+  // Clear Cache
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.clearCache', async () => {
+      const confirm = await vscode.window.showWarningMessage(
+        'Clear all cached structural summaries?',
+        { modal: true },
+        'Clear'
+      );
+      if (confirm === 'Clear') {
+        cacheManager.clear();
+        updateStatusBar(0);
+        dashboardProvider.updateDashboard();
+        vscode.window.showInformationMessage('TokenSlayer: Cache cleared');
+      }
+    })
+  );
+
+  // Show Skeleton Preview
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.showSkeleton', async () => {
+      await SkeletonPreviewProvider.showPreview();
+    })
+  );
+
+  // Export Report
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.exportReport', async () => {
+      const savings = cacheManager.getSavings();
+      const langStats = cacheManager.getLanguageStats();
+      const topSavers = cacheManager.getTopSavers(10);
+      const excludedCount = cacheManager.getExcludedCount();
+      const excludedFiles = cacheManager.getExcludedFiles();
+
+      let report = `# ⚡ TokenSlayer Report\n\n`;
+      report += `**Generated:** ${new Date().toLocaleString()}\n\n`;
+      report += `## Summary\n\n`;
+      report += `| Metric | Value |\n|---|---|\n`;
+      report += `| Tokens Saved | ${savings.totalSaved.toLocaleString()} |\n`;
+      report += `| Reduction | ${savings.reductionPercent}% |\n`;
+      report += `| Files Analyzed | ${savings.filesAnalyzed} |\n`;
+      report += `| Cache Hit Rate | ${cacheManager.getStats().hitRate}% |\n`;
+      report += `| Excluded Files | ${excludedCount} |\n\n`;
+
+      if (langStats.length > 0) {
+        report += `## Language Breakdown\n\n`;
+        report += `| Language | Files | Tokens Saved | Reduction |\n|---|---|---|---|\n`;
+        for (const l of langStats) {
+          report += `| ${l.language} | ${l.files} | ${l.savedTokens.toLocaleString()} | ${l.reductionPercent}% |\n`;
+        }
+        report += `\n`;
+      }
+
+      if (topSavers.length > 0) {
+        report += `## Top Savers\n\n`;
+        report += `| Rank | File | Original | Compacted | Saved |\n|---|---|---|---|---|\n`;
+        topSavers.forEach((s, i) => {
+          report += `| ${i + 1} | ${s.fileName} | ${s.originalTokens.toLocaleString()} | ${s.compactedTokens.toLocaleString()} | ${(s.originalTokens - s.compactedTokens).toLocaleString()} |\n`;
+        });
+        report += `\n`;
+      }
+
+      if (excludedFiles.length > 0) {
+        report += `## 🛡️ Excluded Files (Secrets Detected)\n\n`;
+        report += `| File | Severity | Reasons |\n|---|---|---|\n`;
+        for (const f of excludedFiles) {
+          report += `| ${f.fileName} | ${f.severity.toUpperCase()} | ${f.reasons.join(', ')} |\n`;
+        }
+      }
+
+      const doc = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' });
+      await vscode.window.showTextDocument(doc);
+      vscode.window.showInformationMessage('TokenSlayer: Report generated!');
+    })
+  );
+
+  // ─── 5b. Register CodeLens Provider ────────────────────────────────────
+  const codeLensProvider = new TokenSlayerCodeLensProvider(cacheManager);
+  const codeLensSelector = [
+    { language: 'typescript' }, { language: 'javascript' },
+    { language: 'typescriptreact' }, { language: 'javascriptreact' },
+    { language: 'python' }, { language: 'go' },
+    { language: 'java' }, { language: 'rust' },
+  ];
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider(codeLensSelector, codeLensProvider)
+  );
+
+  // ─── 5c. Register File Decoration Provider ────────────────────────────
+  const fileDecorationProvider = new TokenSlayerFileDecorationProvider(cacheManager);
+  context.subscriptions.push(
+    vscode.window.registerFileDecorationProvider(fileDecorationProvider)
+  );
+
+  // ─── 6. Auto-Analyze on File Open/Save ──────────────────────────────────
+  const supportedLanguages = new Set([
+    'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
+    'python', 'go', 'java', 'rust',
+  ]);
+
+  // Helper: analyze a document and update UI
+  async function analyzeDocument(document: vscode.TextDocument): Promise<void> {
+    if (!supportedLanguages.has(document.languageId)) {
+      return;
+    }
+    // Skip very small files (< 10 lines) or untitled files
+    if (document.lineCount < 10 || document.uri.scheme !== 'file') {
+      return;
+    }
+
+    logger.info(`Auto-analyzing: ${document.uri.fsPath} (${document.languageId}, ${document.lineCount} lines)`);
+
+    const tool = new StructuralSummaryTool(cacheManager);
+    const config = vscode.workspace.getConfiguration('tokenslayer');
+    const verbosity: Verbosity = config.get<Verbosity>('verbosity', 'standard');
+
+    const tokenSource = new vscode.CancellationTokenSource();
+    try {
+      await tool.analyzeFile(document.uri.fsPath, verbosity, tokenSource.token);
+      const savings = cacheManager.getSavings();
+      updateStatusBar(savings.totalSaved);
+      dashboardProvider.updateDashboard();
+      codeLensProvider.refresh();
+      fileDecorationProvider.refresh();
+      logger.info(`Auto-analysis complete: ${savings.totalSaved} total tokens saved`);
+    } catch (error) {
+      logger.error(`Auto-analysis failed for ${document.uri.fsPath}`, error);
+    } finally {
+      tokenSource.dispose();
+    }
+  }
+
+  // Auto-analyze when a file is opened
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+      if (editor) {
+        logger.debug(`Editor changed: ${editor.document.uri.fsPath}`);
+        // Small delay to let language server initialize for the file
+        setTimeout(() => analyzeDocument(editor.document), 1500);
+      }
+    })
+  );
+
+  // Auto-analyze when a file is saved
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(async (document) => {
+      cacheManager.invalidateFile(document.uri.fsPath);
+      await analyzeDocument(document);
+    })
+  );
+
+  // Analyze the currently active editor on activation
+  if (vscode.window.activeTextEditor) {
+    setTimeout(() => {
+      if (vscode.window.activeTextEditor) {
+        analyzeDocument(vscode.window.activeTextEditor.document);
+      }
+    }, 3000); // Wait 3s for language servers to initialize
+  }
+
+  // ─── 7. File Watchers (Cache Invalidation) ──────────────────────────────
+  const fileWatcher = vscode.workspace.onDidChangeTextDocument((event) => {
+    // Invalidate cache when file content changes
+    if (event.contentChanges.length > 0) {
+      cacheManager.invalidateFile(event.document.uri.fsPath);
+    }
+  });
+  context.subscriptions.push(fileWatcher);
+
+  // Also watch for file deletions
+  const deleteWatcher = vscode.workspace.onDidDeleteFiles((event) => {
+    for (const file of event.files) {
+      cacheManager.invalidateFile(file.fsPath);
+    }
+  });
+  context.subscriptions.push(deleteWatcher);
+
+  // ─── 8. Status Bar ────────────────────────────────────────────────────
+  statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100
+  );
+  statusBarItem.command = 'tokenslayer.showDashboard';
+  statusBarItem.tooltip = 'TokenSlayer — Click to open dashboard';
+  updateStatusBar(cacheManager.getSavings().totalSaved);
+  statusBarItem.show();
+  context.subscriptions.push(statusBarItem);
+
+  // ─── 9. Auto-persist cache periodically ──────────────────────────────
+  const persistInterval = setInterval(() => {
+    cacheManager.persist();
+  }, 60_000); // Every 60 seconds
+
+  context.subscriptions.push({
+    dispose: () => clearInterval(persistInterval),
+  });
+
+  logger.info('TokenSlayer activated successfully ✓');
+  logger.show(); // Show the output channel so user can see activity
+}
+
+/**
+ * Extension deactivation.
+ */
+export async function deactivate(): Promise<void> {
+  logger.info('TokenSlayer deactivating...');
+  if (cacheManager) {
+    await cacheManager.persist();
+  }
+  logger.dispose();
+}
+
+/**
+ * Update the status bar item with current savings.
+ */
+function updateStatusBar(tokensSaved: number): void {
+  if (statusBarItem) {
+    if (tokensSaved > 0) {
+      statusBarItem.text = `⚡ ${TokenEstimator.formatCount(tokensSaved)} tokens saved`;
+    } else {
+      statusBarItem.text = '⚡ TokenSlayer';
+    }
+  }
+}

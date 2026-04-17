@@ -1,0 +1,54 @@
+Building a **Semantic Structural Cache** as a VS Code extension addresses the fundamental "context bloat" problem that currently limits AI productivity. Below is the complete requirement and design specification for this "token-killing" solution.
+
+---
+
+## 1. Problem Statement: The "Orientation" Tax
+[cite_start]Current AI coding assistants, including GitHub Copilot, treat source code primarily as **raw text or blobs**[cite: 76]. This leads to two critical inefficiencies:
+* [cite_start]**Token Waste:** Up to **80% of tokens** are often wasted during the "orientation phase" where the LLM reads massive files just to identify a single interface or function[cite: 37, 67].
+* [cite_start]**Context Window Saturation:** Standard memory is often limited to roughly **200 lines** of preferences, causing the AI to "forget" deep architectural relationships in large repositories[cite: 51, 69].
+* [cite_start]**Redundant Computation:** Developers frequently ask repetitive architectural questions, forcing the LLM to re-process the same context and costing unnecessary tokens every time[cite: 46, 72].
+
+---
+
+## 2. Requirement: The "Semantic Structural Cache"
+[cite_start]The objective is to move from text-based search to a **locally-indexed, structural knowledge graph**[cite: 60]. 
+
+### Core Functional Requirements
+* [cite_start]**AST-Driven Extraction:** Instead of sending whole files, the tool must send **10-line structural "skeletons"** (interface definitions, call graphs, and type hierarchies)[cite: 41, 61, 77].
+* [cite_start]**Domain-Aware Compaction:** The system must automatically "compress" language-specific files (e.g., turning a 1,000-line SQL schema into a 20-line relationship map)[cite: 44, 45, 63].
+* [cite_start]**Local Semantic Persistence:** Structural summaries must be cached locally to provide **zero-token latency** for repeat or refinement queries[cite: 64, 73, 74].
+* [cite_start]**Deep IDE Integration:** The tool must leverage the **VS Code Language Model Tool API** to intercept and prune context before it reaches the LLM[cite: 55, 95, 102].
+
+---
+
+## 3. Technical Design
+
+### A. Architecture Overview
+[cite_start]The system functions as a local middleman between the VS Code environment and the LLM via the **Language Model Tool API**[cite: 59, 92].
+
+### B. The Three-Layer Engine
+1.  [cite_start]**The Foundation (AST-Awareness):** * Utilizes the **Language Server Protocol (LSP)** to "steal" existing symbol trees and definitions for free[cite: 93, 105].
+    * [cite_start]Maps the **call graph** and **type hierarchies** to understand how code is actually connected[cite: 40, 61].
+2.  [cite_start]**The Filter (Domain Compaction):** * Identifies file types (e.g., React, SQL, Python) and applies specific **compaction templates**[cite: 43, 62].
+    * [cite_start]Removes non-essential metadata (comments, indices, implementation details) that the LLM does not need for high-level architectural understanding[cite: 44, 63].
+3.  [cite_start]**The Persistence (Semantic Caching):** * Stores these compressed structural maps in a local cache[cite: 64].
+    * [cite_start]When a developer asks a similar question (e.g., "How do I add a new route?"), the plugin serves the **cached skeleton** directly[cite: 49, 65].
+
+---
+
+## 4. Expected Benefits & Impact
+
+| Metric | Current Standard (Native/Plugin) | **Semantic Structural Cache** |
+| :--- | :--- | :--- |
+| **Token Usage** | [cite_start]High (5,000+ per file) [cite: 41, 77] | [cite_start]**Ultra-Low (200 per "slice")** [cite: 41, 78] |
+| **Savings** | 0% (Baseline) | [cite_start]**40-95% Token Reduction** [cite: 54, 80] |
+| **Data Format** | [cite_start]Raw Text / Blobs [cite: 76] | [cite_start]**AST-Skeletons / Call Graphs** [cite: 40, 77] |
+| **Latency** | Network-dependent | [cite_start]**Instant (for cached queries)** [cite: 74] |
+
+---
+
+## 5. Implementation Strategy: Why a VS Code Extension?
+Building this as a native extension rather than an MCP server offers the **Maximum Benefit** for the following reasons:
+* [cite_start]**Symbol Access:** You gain direct access to VS Code's internal knowledge of where every function and class is located[cite: 103, 104].
+* [cite_start]**Native Tooling:** You can provide Copilot with a dedicated tool (e.g., `#structural-summary`) that it can call specifically to "orient" itself in large codebases[cite: 5, 106].
+* [cite_start]**Context Interception:** Being native allows the tool to prune "bloat" effectively before the data leaves the developer's machine[cite: 95].
