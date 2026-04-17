@@ -86,11 +86,13 @@ jobs:
         run: |
           echo "🔍 Scanning for hardcoded secrets..."
           FOUND=0
-          # Check for common secret patterns
-          grep -rn "AKIA[0-9A-Z]\{16\}" src/ && FOUND=1 || true
-          grep -rn "-----BEGIN.*PRIVATE KEY-----" src/ && FOUND=1 || true
-          grep -rn "sk_live_" src/ && FOUND=1 || true
-          grep -rn "ghp_[A-Za-z0-9]\{36\}" src/ && FOUND=1 || true
+          # Exclude secretsDetector.ts (contains detection patterns, not actual secrets)
+          EXCLUDE="--exclude=secretsDetector.ts"
+          # Check for common secret patterns (-e prevents leading dashes being parsed as flags)
+          grep -rn $EXCLUDE -e "AKIA[0-9A-Z]\{16\}" src/ && FOUND=1 || true
+          grep -rn $EXCLUDE -e "BEGIN.*PRIVATE KEY" src/ && FOUND=1 || true
+          grep -rn $EXCLUDE -e "sk_live_" src/ && FOUND=1 || true
+          grep -rn $EXCLUDE -e "ghp_[A-Za-z0-9]\{36\}" src/ && FOUND=1 || true
           if [ "$FOUND" -eq 1 ]; then
             echo "❌ Potential secrets found in source code!"
             exit 1
