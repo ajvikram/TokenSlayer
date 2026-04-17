@@ -1,3 +1,4 @@
+/* eslint-disable no-useless-escape */
 import { Logger } from './logger';
 
 const logger = Logger.getInstance();
@@ -24,11 +25,11 @@ export class SecretsDetector {
    */
   private static readonly CONTENT_PATTERNS: Array<[RegExp, string, 'low' | 'medium' | 'high']> = [
     // API Keys & Tokens
-    [/(?:api[_-]?key|apikey)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}/i, 'API key', 'high'],
-    [/(?:secret[_-]?key|secretkey)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{16,}/i, 'Secret key', 'high'],
-    [/(?:access[_-]?token|accesstoken)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}/i, 'Access token', 'high'],
-    [/(?:auth[_-]?token|authtoken)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}/i, 'Auth token', 'high'],
-    [/bearer\s+[A-Za-z0-9_\-\.]{20,}/i, 'Bearer token', 'high'],
+    [/(?:api[_\-]?key|apikey)\s*[:=]\s*['"][A-Za-z0-9_-]{16,}/i, 'API key', 'high'],
+    [/(?:secret[_\-]?key|secretkey)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{16,}/i, 'Secret key', 'high'],
+    [/(?:access[_\-]?token|accesstoken)\s*[:=]\s*['"][A-Za-z0-9_-]{16,}/i, 'Access token', 'high'],
+    [/(?:auth[_\-]?token|authtoken)\s*[:=]\s*['"][A-Za-z0-9_-]{16,}/i, 'Auth token', 'high'],
+    [/bearer\s+[A-Za-z0-9_.\-]{20,}/i, 'Bearer token', 'high'],
 
     // AWS
     [/AKIA[0-9A-Z]{16}/i, 'AWS Access Key ID', 'high'],
@@ -46,17 +47,17 @@ export class SecretsDetector {
 
     // GitHub / GitLab / Bitbucket tokens
     [/gh[pousr]_[A-Za-z0-9_]{30,}/i, 'GitHub token', 'high'],
-    [/glpat-[A-Za-z0-9\-]{20,}/i, 'GitLab token', 'high'],
+    [/glpat-[A-Za-z0-9-]{20,}/i, 'GitLab token', 'high'],
 
     // Stripe
     [/sk_live_[A-Za-z0-9]{20,}/i, 'Stripe secret key', 'high'],
     [/rk_live_[A-Za-z0-9]{20,}/i, 'Stripe restricted key', 'high'],
 
     // Slack
-    [/xox[baprs]-[A-Za-z0-9\-]{10,}/i, 'Slack token', 'high'],
+    [/xox[baprs]-[A-Za-z0-9-]{10,}/i, 'Slack token', 'high'],
 
     // Google
-    [/AIza[0-9A-Za-z_\-]{35}/i, 'Google API key', 'high'],
+    [/AIza[0-9A-Za-z_-]{35}/i, 'Google API key', 'high'],
 
     // JWT (hardcoded)
     [/(?:jwt[_-]?secret|jwt_secret_key)\s*[:=]\s*['"][^'"]{8,}/i, 'JWT secret', 'high'],
