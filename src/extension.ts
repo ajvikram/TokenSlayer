@@ -5,6 +5,7 @@ import { DashboardProvider } from './views/dashboardProvider';
 import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
 import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
 import { TokenSlayerFileDecorationProvider } from './views/fileDecorationProvider';
+import { TokenSlayerChatParticipant } from './chat/chatParticipant';
 import { SymbolExtractor } from './extraction/symbolExtractor';
 import { SkeletonBuilder } from './extraction/skeletonBuilder';
 import { CompactorFactory } from './compaction/compactor';
@@ -295,6 +296,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  // ─── 5d. Register Chat Participant ────────────────────────────────────
+  const chatParticipant = new TokenSlayerChatParticipant(cacheManager);
+  chatParticipant.register(context);
+
   // Analyze the currently active editor on activation
   if (vscode.window.activeTextEditor) {
     setTimeout(() => {
@@ -303,6 +308,65 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }, 3000); // Wait 3s for language servers to initialize
   }
+
+  // ─── 8. Workspace Pre-warming ────────────────────────────────────────────
+  // Background scan all supported files so the cache is hot before Copilot asks
+  setTimeout(async () => {
+    try {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) return;
+
+      const pattern = new vscode.RelativePattern(
+        workspaceFolder,
+        '**/*.{ts,tsx,js,jsx,py,go,java,rs}'
+      );
+      const config = vscode.workspace.getConfiguration('tokenslayer');
+      const ignoredPaths = config.get<string[]>('ignoredPaths', [
+        'node_modules', 'dist', 'out', '.git', 'coverage', '__pycache__', 'vendor',
+      ]);
+      const files = await vscode.workspace.findFiles(
+        pattern,
+        `{${ignoredPaths.map(p => `**/${p}/**`).join(',')}}`,
+        200 // Cap at 200 files for pre-warming
+      );
+
+      logger.info(`Pre-warming: found ${files.length} supported files`);
+
+      const tool = new StructuralSummaryTool(cacheManager);
+      const tokenSource = new vscode.CancellationTokenSource();
+      let warmed = 0;
+
+      for (const file of files) {
+        // Skip if already cached
+        try {
+          const doc = await vscode.workspace.openTextDocument(file);
+          if (!supportedLanguages.has(doc.languageId) || doc.lineCount < 10) continue;
+
+          const content = doc.getText();
+          const key = cacheManager.generateKey(file.fsPath, content);
+          if (cacheManager.get(key)) continue; // Already cached
+
+          await tool.analyzeFile(file.fsPath, 'standard', tokenSource.token);
+          warmed++;
+        } catch {
+          // Skip files that can't be opened
+        }
+      }
+
+      if (warmed > 0) {
+        const savings = cacheManager.getSavings();
+        updateStatusBar(savings.totalSaved);
+        dashboardProvider.updateDashboard();
+        codeLensProvider.refresh();
+        fileDecorationProvider.refresh();
+        logger.info(`Pre-warming complete: ${warmed} files cached, ${savings.totalSaved} total tokens saved`);
+      }
+
+      tokenSource.dispose();
+    } catch (error) {
+      logger.error('Pre-warming failed', error);
+    }
+  }, 8000); // Wait 8s for all language servers to fully initialize
 
   // ─── 7. File Watchers (Cache Invalidation) ──────────────────────────────
   const fileWatcher = vscode.workspace.onDidChangeTextDocument((event) => {

@@ -1,20 +1,37 @@
+import { encode } from 'gpt-tokenizer';
+
 /**
- * Lightweight token count estimator.
- * Uses the ~4 characters per token heuristic for code/English text.
- * This avoids needing a tokenizer dependency (tiktoken, etc.).
+ * Accurate BPE token counter using GPT tokenizer.
+ * Uses the real cl100k_base encoding (GPT-4/GPT-3.5) for exact counts.
+ * Falls back to character-based estimation for very large inputs.
  */
 export class TokenEstimator {
-  /** Average characters per token for code */
-  private static readonly CHARS_PER_TOKEN = 4;
+  /** Fallback: average characters per token for code */
+  private static readonly CHARS_PER_TOKEN_FALLBACK = 4;
+
+  /** Max chars before falling back to estimation (performance guard) */
+  private static readonly MAX_EXACT_CHARS = 500_000;
 
   /**
-   * Estimate the number of tokens in a string.
+   * Count the exact number of BPE tokens in a string.
+   * Uses gpt-tokenizer (cl100k_base) for accuracy.
    */
   static estimate(text: string): number {
     if (!text || text.length === 0) {
       return 0;
     }
-    return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN);
+
+    // For very large inputs, fall back to estimation to avoid blocking
+    if (text.length > TokenEstimator.MAX_EXACT_CHARS) {
+      return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN_FALLBACK);
+    }
+
+    try {
+      return encode(text).length;
+    } catch {
+      // Fallback if tokenizer fails for any reason
+      return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN_FALLBACK);
+    }
   }
 
   /**

@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -80,6 +80,25 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "tokenslayer.chat",
+        "fullName": "TokenSlayer",
+        "name": "tokenslayer",
+        "description": "Get compact structural summaries of your code. Analyze files, directories, or your entire workspace with AST-driven skeletons that save 40-95% of tokens.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "analyze",
+            "description": "Analyze the active file or workspace"
+          },
+          {
+            "name": "workspace",
+            "description": "Generate a structural map of the entire workspace"
+          }
+        ]
+      }
+    ],
     "languageModelTools": [
       {
         "name": "tokenslayer-structural-summary",
@@ -178,5 +197,8 @@
     "eslint": "^9.39.4",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.58.2"
+  },
+  "dependencies": {
+    "gpt-tokenizer": "^3.4.0"
   }
 }
