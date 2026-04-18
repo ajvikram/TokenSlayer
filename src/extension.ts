@@ -29,6 +29,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   cacheManager = new CacheManager(context);
   await cacheManager.initialize();
 
+  // ─── 1b. Initialize tokenizer in background (non-blocking) ──────────
+  TokenEstimator.initAsync();
+
   // ─── 2. Register LM Tool ───────────────────────────────────────────────
   const structuralSummaryTool = new StructuralSummaryTool(cacheManager);
   context.subscriptions.push(

@@ -1,37 +1,60 @@
-import { encode } from 'gpt-tokenizer';
-
 /**
- * Accurate BPE token counter using GPT tokenizer.
- * Uses the real cl100k_base encoding (GPT-4/GPT-3.5) for exact counts.
- * Falls back to character-based estimation for very large inputs.
+ * Accurate token counter with lazy-loaded BPE tokenizer.
+ * Falls back to character-based estimation until the tokenizer is ready,
+ * ensuring zero-delay extension activation.
  */
 export class TokenEstimator {
   /** Fallback: average characters per token for code */
   private static readonly CHARS_PER_TOKEN_FALLBACK = 4;
 
-  /** Max chars before falling back to estimation (performance guard) */
-  private static readonly MAX_EXACT_CHARS = 500_000;
+  /** Lazy-loaded encode function */
+  private static encodeFn: ((text: string) => number[]) | null = null;
+  private static loadAttempted = false;
 
   /**
-   * Count the exact number of BPE tokens in a string.
-   * Uses gpt-tokenizer (cl100k_base) for accuracy.
+   * Lazy-load the BPE tokenizer in the background.
+   * Called once — subsequent calls use the cached function.
+   */
+  private static async loadTokenizer(): Promise<void> {
+    if (TokenEstimator.loadAttempted) return;
+    TokenEstimator.loadAttempted = true;
+
+    try {
+      const mod = await import('gpt-tokenizer');
+      TokenEstimator.encodeFn = mod.encode;
+    } catch {
+      // gpt-tokenizer not available — stick with fallback
+      TokenEstimator.encodeFn = null;
+    }
+  }
+
+  /**
+   * Initialize the tokenizer in the background.
+   * Call this once during extension activation (non-blocking).
+   */
+  static initAsync(): void {
+    TokenEstimator.loadTokenizer();
+  }
+
+  /**
+   * Estimate the number of tokens in a string.
+   * Uses BPE tokenizer if loaded, otherwise falls back to chars/4.
    */
   static estimate(text: string): number {
     if (!text || text.length === 0) {
       return 0;
     }
 
-    // For very large inputs, fall back to estimation to avoid blocking
-    if (text.length > TokenEstimator.MAX_EXACT_CHARS) {
-      return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN_FALLBACK);
+    // Use BPE tokenizer if available and text isn't too large
+    if (TokenEstimator.encodeFn && text.length <= 500_000) {
+      try {
+        return TokenEstimator.encodeFn(text).length;
+      } catch {
+        // Fall through to estimation
+      }
     }
 
-    try {
-      return encode(text).length;
-    } catch {
-      // Fallback if tokenizer fails for any reason
-      return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN_FALLBACK);
-    }
+    return Math.ceil(text.length / TokenEstimator.CHARS_PER_TOKEN_FALLBACK);
   }
 
   /**
