@@ -6,6 +6,7 @@ import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
 import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
 import { TokenSlayerFileDecorationProvider } from './views/fileDecorationProvider';
 import { TokenSlayerChatParticipant } from './chat/chatParticipant';
+import { LocalServer } from './server/localServer';
 import { SymbolExtractor } from './extraction/symbolExtractor';
 import { SkeletonBuilder } from './extraction/skeletonBuilder';
 import { CompactorFactory } from './compaction/compactor';
@@ -18,6 +19,7 @@ const logger = Logger.getInstance();
 let statusBarItem: vscode.StatusBarItem;
 let cacheManager: CacheManager;
 let dashboardProvider: DashboardProvider;
+let localServer: LocalServer;
 
 /**
  * Extension activation entry point.
@@ -38,6 +40,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.lm.registerTool('tokenslayer-structural-summary', structuralSummaryTool)
   );
   logger.info('Registered LM tool: tokenslayer-structural-summary');
+
+  // ─── 2b. Start Local Server (API) ─────────────────────────────────────────
+  localServer = new LocalServer(cacheManager);
+  localServer.start();
+  context.subscriptions.push({
+    dispose: () => localServer.stop()
+  });
 
   // ─── 3. Register Dashboard View ─────────────────────────────────────────
   dashboardProvider = new DashboardProvider(context.extensionUri, cacheManager);
