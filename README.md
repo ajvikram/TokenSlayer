@@ -138,6 +138,12 @@ Generate a formatted Markdown report with complete savings analytics:
 
 Side-by-side comparison of original file vs structural skeleton with `TokenSlayer: Preview Skeleton` command.
 
+### 🔌 Universal Local Server API
+
+TokenSlayer exposes a local HTTP API (port `4733`) so external agents (like Claude Desktop, Cursor, or CLI tools) can query the structural cache independently of Copilot.
+- `GET /analyze?path=/path/to/file` -> Returns JSON structural skeleton
+- `GET /stats` -> Returns JSON token savings data
+
 ---
 
 ## 🌐 Supported Languages
@@ -149,7 +155,8 @@ Side-by-side comparison of original file vs structural skeleton with `TokenSlaye
 | **Go** | Keeps type/func signatures, struct fields, interface methods |
 | **Java** | Keeps class/interface/enum, method signatures, Spring/Lombok/JPA/JUnit annotations |
 | **Rust** | Keeps struct/enum/trait/impl, function signatures, derive macros, cfg/test attributes |
-| _Coming in V2_ | SQL relationship maps, C#, Kotlin |
+| **C#** | Keeps record/struct/class, signatures, properties, ASP.NET attributes `[Route]`, `[ApiController]` |
+| **Kotlin** | Keeps data class/object, val/var, JVM/Spring annotations `@RestController`, `@JvmStatic` |
 
 ---
 
