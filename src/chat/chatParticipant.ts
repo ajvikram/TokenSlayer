@@ -168,7 +168,7 @@ export class TokenSlayerChatParticipant {
     // Find all supported files
     const pattern = new vscode.RelativePattern(
       workspaceFolder,
-      '**/*.{ts,tsx,js,jsx,py,go,java,rs}'
+      '**/*.{ts,tsx,js,jsx,py,go,java,rs,cs,kt}'
     );
     const config = vscode.workspace.getConfiguration('tokenslayer');
     const ignoredPaths = config.get<string[]>('ignoredPaths', []);

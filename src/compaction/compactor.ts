@@ -6,6 +6,8 @@ import { PythonCompactor } from './pythonCompactor';
 import { GoCompactor } from './goCompactor';
 import { JavaCompactor } from './javaCompactor';
 import { RustCompactor } from './rustCompactor';
+import { CSharpCompactor } from './csharpCompactor';
+import { KotlinCompactor } from './kotlinCompactor';
 
 const logger = Logger.getInstance();
 
@@ -37,6 +39,8 @@ export class CompactorFactory {
     new GoCompactor(),
     new JavaCompactor(),
     new RustCompactor(),
+    new CSharpCompactor(),
+    new KotlinCompactor(),
   ];
 
   /**

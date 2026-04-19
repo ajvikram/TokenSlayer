@@ -254,7 +254,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ─── 6. Auto-Analyze on File Open/Save ──────────────────────────────────
   const supportedLanguages = new Set([
     'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
-    'python', 'go', 'java', 'rust',
+    'python', 'go', 'java', 'rust', 'csharp', 'kotlin',
   ]);
 
   // Helper: analyze a document and update UI
@@ -330,7 +330,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
       const pattern = new vscode.RelativePattern(
         workspaceFolder,
-        '**/*.{ts,tsx,js,jsx,py,go,java,rs}'
+        '**/*.{ts,tsx,js,jsx,py,go,java,rs,cs,kt}'
       );
       const config = vscode.workspace.getConfiguration('tokenslayer');
       const ignoredPaths = config.get<string[]>('ignoredPaths', [

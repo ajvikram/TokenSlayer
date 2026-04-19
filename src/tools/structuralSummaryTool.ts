@@ -252,12 +252,14 @@ export class StructuralSummaryTool implements vscode.LanguageModelTool<Structura
       '.go',
       '.java',
       '.rs',
+      '.cs',
+      '.kt'
     ];
 
     const config = vscode.workspace.getConfiguration('tokenslayer');
     const ignoredPaths = config.get<string[]>('ignoredPaths', []);
 
-    const pattern = new vscode.RelativePattern(dirUri, '**/*.{ts,tsx,js,jsx,py,go,java,rs}');
+    const pattern = new vscode.RelativePattern(dirUri, '**/*.{ts,tsx,js,jsx,py,go,java,rs,cs,kt}');
     const files = await vscode.workspace.findFiles(pattern, `{${ignoredPaths.join(',')}}`, 100);
 
     return files.filter(f => {
