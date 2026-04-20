@@ -144,6 +144,18 @@ TokenSlayer exposes a local HTTP API (port `4733`) so external agents (like Clau
 - `GET /analyze?path=/path/to/file` -> Returns JSON structural skeleton
 - `GET /stats` -> Returns JSON token savings data
 
+### 🤖 Cursor & Claude Desktop Support (MCP)
+
+TokenSlayer includes a **zero-dependency MCP Bridge** so external IDEs like Cursor can use it natively as a tool.
+Since TokenSlayer must run inside VS Code to access the AST, you must have VS Code open in the background for this to work.
+
+**How to use in Cursor:**
+1. Open Cursor -> Settings -> Features -> MCP Servers
+2. Click **+ Add New MCP Server**
+3. Type: `command`
+4. Command: `node /absolute/path/to/TokenSlayer/scripts/mcp-bridge.js`
+5. Save! Cursor will instantly see the `get_structural_skeleton` tool and use it autonomously to save tokens.
+
 ---
 
 ## 🌐 Supported Languages
