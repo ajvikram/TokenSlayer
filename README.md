@@ -156,6 +156,22 @@ Since TokenSlayer must run inside VS Code to access the AST, you must have VS Co
 4. Command: `node /absolute/path/to/TokenSlayer/scripts/mcp-bridge.js`
 5. Save! Cursor will instantly see the `get_structural_skeleton` tool and use it autonomously to save tokens.
 
+### 🐍 The Universal Standalone Skill (Zero VS Code Dependency)
+
+If you use Windsurf, Cursor, Antigravity, or the CLI, and **you do not want to use VS Code at all**, TokenSlayer provides a 100% standalone, zero-dependency parser: `standalone/tokenslayer.js`.
+
+This script uses a custom brace-counting and indentation engine to mimic VS Code's AST extraction, allowing any agent to compact code natively.
+
+**How to use as an Agent Skill (Windsurf / Antigravity):**
+Just tell your agent:
+> *"Use `node /path/to/TokenSlayer/standalone/tokenslayer.js <filepath>` to read files instead of reading them directly."*
+
+**How to use via CLI:**
+```bash
+node standalone/tokenslayer.js src/auth.ts
+```
+*(Outputs the token-saving skeleton directly to your terminal!)*
+
 ---
 
 ## 🌐 Supported Languages
