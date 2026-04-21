@@ -1,0 +1,21 @@
+{
+  "name": "tokenslayer-mcp-server",
+  "version": "1.0.0",
+  "description": "Standalone MCP Server for TokenSlayer",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "tokenslayer-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
