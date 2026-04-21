@@ -27,7 +27,9 @@ With TokenSlayer:     8-line structural skeleton →    200 tokens consumed (96%
 
 ## ✨ Features
 
-### 🧠 Three-Layer Semantic Engine
+### 1️⃣ The VS Code Extension
+
+#### 🧠 Three-Layer Semantic Engine
 
 | Layer | What It Does | Performance |
 |---|---|---|
@@ -35,7 +37,7 @@ With TokenSlayer:     8-line structural skeleton →    200 tokens consumed (96%
 | **Domain Compaction** | Language-specific compactors strip bodies, keep signatures | ~5ms (pure string ops) |
 | **Semantic Caching** | Content-hash LRU cache with file-watcher invalidation | Instant on repeat |
 
-### 🔧 Copilot Integration
+#### 🔧 Copilot Integration
 
 Registered as `#tokenslayer-structural-summary` — a [Language Model Tool](https://code.visualstudio.com/api/extension-guides/language-model-tool) that Copilot can call autonomously:
 
@@ -45,7 +47,7 @@ Registered as `#tokenslayer-structural-summary` — a [Language Model Tool](http
 TokenSlayer → returns compact skeleton → Copilot answers using 200 tokens instead of 5,000
 ```
 
-### 📊 Premium Sidebar Dashboard
+#### 📊 Premium Sidebar Dashboard
 
 <div align="center">
   <table>
@@ -73,7 +75,7 @@ A real-time analytics dashboard with:
 - **🛡️ Excluded Files** — Files blocked for containing secrets, with severity badges
 - **🔄 Auto-Refresh** — Dashboard updates every 5 seconds automatically
 
-### ⚡ Inline CodeLens
+#### ⚡ Inline CodeLens
 
 TokenSlayer adds reducibility indicators directly in your editor:
 
@@ -89,7 +91,7 @@ class MemoryManager:
   <p><em>Real CodeLens indicator showing <code>⚡ ~119 lines → ~14 lines skeleton</code> above a class</em></p>
 </div>
 
-### 📂 File Explorer Badges
+#### 📂 File Explorer Badges
 
 Color-coded badges appear on files in the Explorer sidebar:
 
@@ -98,7 +100,7 @@ Color-coded badges appear on files in the Explorer sidebar:
 | ⚡ (green) | File analyzed & cached — shows reduction % on hover |
 | 🔒 (red) | File excluded — contains detected secrets |
 
-### 🛡️ Secrets Detection & Protection
+#### 🛡️ Secrets Detection & Protection
 
 Automatically scans files for credentials and blocks them from LLM context:
 
@@ -113,7 +115,7 @@ Automatically scans files for credentials and blocks them from LLM context:
 
 Excluded files appear in the dashboard with severity levels: 🔴 HIGH · 🟡 MEDIUM · 🟢 LOW
 
-### 📋 Export Report
+#### 📋 Export Report
 
 Generate a formatted Markdown report with complete savings analytics:
 
@@ -134,34 +136,32 @@ Generate a formatted Markdown report with complete savings analytics:
 | python     | 38    | 47,223      | 67%       |
 ```
 
-### 👁️ Skeleton Preview
+#### 👁️ Skeleton Preview
 
 Side-by-side comparison of original file vs structural skeleton with `TokenSlayer: Preview Skeleton` command.
 
-### 🔌 Universal Local Server API
+---
 
-TokenSlayer exposes a local HTTP API (port `4733`) so external agents (like Claude Desktop, Cursor, or CLI tools) can query the structural cache independently of Copilot.
-- `GET /analyze?path=/path/to/file` -> Returns JSON structural skeleton
-- `GET /stats` -> Returns JSON token savings data
+### 2️⃣ Universal IDE Support (Zero VS Code Dependency)
 
-### 🤖 Cursor & Claude Desktop Support (MCP)
+TokenSlayer has evolved into a Universal Semantic Cache. If you do not use VS Code, you can still slash your token usage natively in Cursor, Claude Desktop, Windsurf, or your terminal.
 
-TokenSlayer includes a **True Standalone Node MCP Server**. It uses the zero-dependency parser to analyze your codebase instantly, **without requiring VS Code to be open!**
+#### 🤖 Cursor & Claude Desktop (True Node MCP Server)
+
+TokenSlayer includes a **True Standalone Node MCP Server**. It uses our zero-dependency heuristic parser to analyze your codebase instantly, **without requiring VS Code to be open!**
 
 **How to use in Cursor:**
 1. Open Cursor -> Settings -> Features -> MCP Servers
 2. Click **+ Add New MCP Server**
 3. Type: `command`
 4. Command: `node /absolute/path/to/TokenSlayer/mcp-server/build/index.js`
-5. Save! Cursor will instantly see the `analyze_files` and `analyze_workspace` tools.
+5. Save! Cursor will instantly have access to `analyze_files` and `analyze_workspace` bulk compaction tools.
 
-### 🐍 The Universal Standalone Skill (Zero VS Code Dependency)
+#### 🐍 Universal Standalone CLI & Agent Skill
 
-If you use Windsurf, Cursor, Antigravity, or the CLI, and **you do not want to use VS Code at all**, TokenSlayer provides a 100% standalone, zero-dependency parser: `standalone/tokenslayer.js`.
+If you use Windsurf, Antigravity, or just the terminal, TokenSlayer provides a 100% standalone, zero-dependency CLI parser: `standalone/tokenslayer.js`.
 
-This script uses a custom brace-counting and indentation engine to mimic VS Code's AST extraction, allowing any agent to compact code natively.
-
-**How to use as an Agent Skill (Windsurf / Antigravity):**
+**How to use as an Agent Skill:**
 Just tell your agent:
 > *"Use `node /path/to/TokenSlayer/standalone/tokenslayer.js <filepath>` to read files instead of reading them directly."*
 
@@ -169,7 +169,12 @@ Just tell your agent:
 ```bash
 node standalone/tokenslayer.js src/extension.ts
 ```
-*(Outputs the token-saving skeleton directly to your terminal!)*
+
+#### 🔌 Local HTTP REST API
+
+If you prefer REST, running the VS Code Extension exposes a local HTTP API (port `4733`) so custom scripts can query the cache.
+- `GET /analyze?path=/path/to/file` -> Returns JSON structural skeleton
+- `GET /stats` -> Returns JSON token savings data
 
 ---
 
