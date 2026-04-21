@@ -168,7 +168,7 @@ Just tell your agent:
 
 **How to use via CLI:**
 ```bash
-node standalone/tokenslayer.js src/auth.ts
+node standalone/tokenslayer.js src/extension.ts
 ```
 *(Outputs the token-saving skeleton directly to your terminal!)*
 
