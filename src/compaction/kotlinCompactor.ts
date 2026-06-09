@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractBlockDocComment } from './docCommentExtractor';
 
 /**
  * Kotlin-specific compactor.
@@ -52,10 +53,13 @@ export class KotlinCompactor implements ICompactor {
   ): void {
     const indent = '    '.repeat(depth);
 
+    const doc = extractBlockDocComment(fileLines, symbol.range.startLine);
+
     switch (symbol.kind) {
       case vscode.SymbolKind.Class:
       case vscode.SymbolKind.Interface:
       case vscode.SymbolKind.Struct: // Some LSPs map objects/data classes to Struct
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         const classAnnotations = this.extractAnnotations(fileLines, symbol.range.startLine);
         for (const ann of classAnnotations) {
           lines.push(`${indent}${ann}`);
@@ -69,6 +73,7 @@ export class KotlinCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Enum:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}enum class ${symbol.name} {`);
         for (const child of symbol.children) {
           lines.push(`${indent}    ${child.name},`);
@@ -80,6 +85,7 @@ export class KotlinCompactor implements ICompactor {
       case vscode.SymbolKind.Function:
       case vscode.SymbolKind.Method:
       case vscode.SymbolKind.Constructor:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         const methodAnnotations = this.extractAnnotations(fileLines, symbol.range.startLine);
         for (const ann of methodAnnotations) {
           lines.push(`${indent}${ann}`);

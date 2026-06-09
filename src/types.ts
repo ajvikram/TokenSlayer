@@ -49,11 +49,19 @@ export interface CacheStats {
 
 // ─── Token Savings ──────────────────────────────────────────────────────────
 
+export interface CostEstimate {
+  gpt4o: number;
+  claudeSonnet: number;
+  label: string;
+}
+
 export interface TokenSavings {
   totalOriginalTokens: number;
   totalCompactedTokens: number;
   totalSaved: number;
   reductionPercent: number;
+  avgSavedPerFile: number;
+  estimatedCost: CostEstimate;
   filesAnalyzed: number;
   cacheHits: number;
   cacheMisses: number;
@@ -63,8 +71,9 @@ export interface TokenSavings {
 
 export interface StructuralSummaryInput {
   filePath?: string;
-  scope?: 'file' | 'directory' | 'workspace';
+  scope?: 'file' | 'directory' | 'workspace' | 'dependency-chain';
   verbosity?: 'minimal' | 'standard' | 'detailed';
+  targetModel?: string;
 }
 
 // ─── Verbosity ──────────────────────────────────────────────────────────────

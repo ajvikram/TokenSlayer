@@ -1,16 +1,21 @@
 import * as vscode from 'vscode';
 import { CacheManager } from './cache/cacheManager';
 import { StructuralSummaryTool } from './tools/structuralSummaryTool';
+import { PatchTool } from './tools/patchTool';
 import { DashboardProvider } from './views/dashboardProvider';
 import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
 import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
 import { TokenSlayerFileDecorationProvider } from './views/fileDecorationProvider';
 import { TokenSlayerChatParticipant } from './chat/chatParticipant';
 import { LocalServer } from './server/localServer';
+import { wireUpCopilot } from './copilot/wireUp';
+import { wireUpTool, SUPPORTED_TOOLS } from './copilot/wireUpAll';
 import { SymbolExtractor } from './extraction/symbolExtractor';
 import { SkeletonBuilder } from './extraction/skeletonBuilder';
 import { CompactorFactory } from './compaction/compactor';
 import { TokenEstimator } from './utils/tokenEstimator';
+import { buildDependencyChain } from './utils/importResolver';
+import { applyPatches, Patch } from './utils/structuralPatch';
 import { Logger } from './utils/logger';
 import { Verbosity } from './types';
 
@@ -40,6 +45,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.lm.registerTool('tokenslayer-structural-summary', structuralSummaryTool)
   );
   logger.info('Registered LM tool: tokenslayer-structural-summary');
+
+  const patchTool = new PatchTool();
+  context.subscriptions.push(
+    vscode.lm.registerTool('tokenslayer-apply-patch', patchTool)
+  );
+  logger.info('Registered LM tool: tokenslayer-apply-patch');
 
   // ─── 2b. Start Local Server (API) ─────────────────────────────────────────
   localServer = new LocalServer(cacheManager);
@@ -90,7 +101,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
           // Find all supported files
           const files = await vscode.workspace.findFiles(
-            '**/*.{ts,tsx,js,jsx,py,go,java,rs}',
+            '**/*.{ts,tsx,js,jsx,py,go,java,rs,cs,kt,html,htm,css,scss,sass,less}',
             `{${config.get<string[]>('ignoredPaths', []).join(',')}}`,
             200
           );
@@ -197,6 +208,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       report += `| Metric | Value |\n|---|---|\n`;
       report += `| Tokens Saved | ${savings.totalSaved.toLocaleString()} |\n`;
       report += `| Reduction | ${savings.reductionPercent}% |\n`;
+      report += `| Est. Cost Saved | ${savings.estimatedCost.label} |\n`;
+      report += `| Tokens Processed | ${savings.totalOriginalTokens.toLocaleString()} |\n`;
+      report += `| Avg Saved / File | ${savings.avgSavedPerFile.toLocaleString()} |\n`;
       report += `| Files Analyzed | ${savings.filesAnalyzed} |\n`;
       report += `| Cache Hit Rate | ${cacheManager.getStats().hitRate}% |\n`;
       report += `| Excluded Files | ${excludedCount} |\n\n`;
@@ -233,6 +247,141 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  // Wire Up Copilot — writes .github/copilot-instructions.md + .vscode/mcp.json
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.wireUpCopilot', async () => {
+      await wireUpCopilot(context);
+    })
+  );
+
+  // Wire Up AI Tool — QuickPick for all supported tools (Copilot + third-party)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.wireUpTool', async () => {
+      const items: { label: string; id: string; description: string }[] = [
+        { label: 'Copilot', id: 'copilot', description: '.vscode/mcp.json + .github/copilot-instructions.md' },
+        ...SUPPORTED_TOOLS.map(t => ({ label: t.label, id: t.id, description: t.configPath })),
+      ];
+
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select an AI tool to wire up with TokenSlayer',
+        title: 'TokenSlayer: Wire Up AI Tool',
+      });
+      if (!picked) { return; }
+
+      if (picked.id === 'copilot') {
+        await wireUpCopilot(context);
+      } else {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+          vscode.window.showWarningMessage('TokenSlayer: open a workspace folder first.');
+          return;
+        }
+        await wireUpTool(picked.id, workspaceFolder.uri.fsPath);
+      }
+    })
+  );
+
+  // Analyze Dependency Chain — follow local imports from a seed file
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.analyzeDependencyChain', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showWarningMessage('No active editor — open a file first');
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration('tokenslayer');
+      const maxDepth = config.get<number>('dependencyChainDepth', 2);
+      const verbosity: Verbosity = config.get<Verbosity>('verbosity', 'standard');
+
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'TokenSlayer: Analyzing dependency chain...',
+          cancellable: true,
+        },
+        async (_progress, token) => {
+          const doc = editor.document;
+          const chain = buildDependencyChain(doc.uri.fsPath, doc.languageId, maxDepth);
+
+          const tool = new StructuralSummaryTool(cacheManager);
+          const results: string[] = [];
+
+          for (const fp of chain) {
+            if (token.isCancellationRequested) break;
+            const result = await tool.analyzeFile(fp, verbosity, token);
+            if (result.length > 0) results.push(result);
+          }
+
+          const combined = results.join('\n\n---\n\n');
+          const previewDoc = await vscode.workspace.openTextDocument({
+            content: combined,
+            language: doc.languageId,
+          });
+          await vscode.window.showTextDocument(previewDoc, { preview: true });
+
+          const savings = cacheManager.getSavings();
+          updateStatusBar(savings.totalSaved);
+          dashboardProvider.updateDashboard();
+
+          vscode.window.showInformationMessage(
+            `TokenSlayer: Dependency chain — ${chain.length} file(s) analyzed`
+          );
+        }
+      );
+    })
+  );
+
+  // Apply Structural Patch — reads JSON patch from clipboard and previews diff
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tokenslayer.applyPatch', async () => {
+      const clipText = await vscode.env.clipboard.readText();
+      let patches: Patch[];
+
+      try {
+        const parsed = JSON.parse(clipText);
+        patches = Array.isArray(parsed) ? parsed : parsed.patches || [parsed];
+      } catch {
+        const input = await vscode.window.showInputBox({
+          prompt: 'Paste a JSON patch array (or copy one to the clipboard first)',
+          placeHolder: '[{"nodeId": "...", "action": "replace", "content": "..."}]',
+        });
+        if (!input) return;
+        try {
+          const parsed = JSON.parse(input);
+          patches = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          vscode.window.showErrorMessage('TokenSlayer: Invalid JSON patch');
+          return;
+        }
+      }
+
+      const results = applyPatches(patches, true);
+      if (results.length === 0) {
+        vscode.window.showWarningMessage('TokenSlayer: No patches could be applied');
+        return;
+      }
+
+      const diffOutput = results.map(r => `// ${r.filePath}\n${r.diff}`).join('\n\n');
+      const doc = await vscode.workspace.openTextDocument({
+        content: diffOutput,
+        language: 'diff',
+      });
+      await vscode.window.showTextDocument(doc, { preview: true });
+
+      const apply = await vscode.window.showInformationMessage(
+        `TokenSlayer: Preview ${results.length} patch diff(s). Apply changes?`,
+        'Apply',
+        'Cancel'
+      );
+
+      if (apply === 'Apply') {
+        applyPatches(patches, false);
+        vscode.window.showInformationMessage('TokenSlayer: Patches applied successfully');
+      }
+    })
+  );
+
   // ─── 5b. Register CodeLens Provider ────────────────────────────────────
   const codeLensProvider = new TokenSlayerCodeLensProvider(cacheManager);
   const codeLensSelector = [
@@ -240,6 +389,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     { language: 'typescriptreact' }, { language: 'javascriptreact' },
     { language: 'python' }, { language: 'go' },
     { language: 'java' }, { language: 'rust' },
+    { language: 'csharp' }, { language: 'kotlin' },
+    { language: 'html' }, { language: 'css' },
+    { language: 'scss' }, { language: 'less' },
   ];
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(codeLensSelector, codeLensProvider)
@@ -255,6 +407,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const supportedLanguages = new Set([
     'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
     'python', 'go', 'java', 'rust', 'csharp', 'kotlin',
+    'html', 'css', 'scss', 'sass', 'less',
   ]);
 
   // Helper: analyze a document and update UI

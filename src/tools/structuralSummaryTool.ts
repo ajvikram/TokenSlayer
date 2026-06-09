@@ -6,6 +6,9 @@ import { CompactorFactory } from '../compaction/compactor';
 import { CacheManager } from '../cache/cacheManager';
 import { TokenEstimator } from '../utils/tokenEstimator';
 import { SecretsDetector } from '../utils/secretsDetector';
+import { optimizeLayout } from '../utils/layoutOptimizer';
+import { tagAllNodes } from '../utils/structuralPatch';
+import { buildDependencyChain } from '../utils/importResolver';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -68,8 +71,16 @@ export class StructuralSummaryTool implements vscode.LanguageModelTool<Structura
         case 'workspace':
           results = await this.analyzeWorkspace(verbosity, token);
           break;
+        case 'dependency-chain':
+          results = await this.analyzeDependencyChain(input.filePath, verbosity, token);
+          break;
         default:
           results = [await this.analyzeFile(input.filePath, verbosity, token)];
+      }
+
+      const targetModel = input.targetModel;
+      if (targetModel) {
+        results = results.map(r => optimizeLayout(r, targetModel));
       }
 
       const combined = results.filter(r => r.length > 0).join('\n\n---\n\n');
@@ -195,7 +206,45 @@ export class StructuralSummaryTool implements vscode.LanguageModelTool<Structura
       `Analyzed ${uri.fsPath}: ${result.originalTokens} → ${result.compactedTokens} tokens (${result.reductionPercent}% reduction)`
     );
 
-    return result.skeleton;
+    const tagged = tagAllNodes(result.skeleton, uri.fsPath, content);
+    return tagged;
+  }
+
+  /**
+   * Analyze a file and all its local dependencies via BFS import traversal.
+   */
+  private async analyzeDependencyChain(
+    filePath: string | undefined,
+    verbosity: Verbosity,
+    token: vscode.CancellationToken
+  ): Promise<string[]> {
+    let seedUri: vscode.Uri;
+
+    if (filePath) {
+      seedUri = filePath.startsWith('/') || filePath.includes(':')
+        ? vscode.Uri.file(filePath)
+        : vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, filePath);
+    } else {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) return ['No active editor and no filePath specified'];
+      seedUri = editor.document.uri;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(seedUri);
+    const config = vscode.workspace.getConfiguration('tokenslayer');
+    const maxDepth = config.get<number>('dependencyChainDepth', 2);
+
+    const chain = buildDependencyChain(seedUri.fsPath, doc.languageId, maxDepth);
+    logger.info(`Dependency chain from ${seedUri.fsPath}: ${chain.length} file(s), depth=${maxDepth}`);
+
+    const results: string[] = [];
+    for (const fp of chain) {
+      if (token.isCancellationRequested) break;
+      const result = await this.analyzeFile(fp, verbosity, token);
+      if (result.length > 0) results.push(result);
+    }
+
+    return results;
   }
 
   /**

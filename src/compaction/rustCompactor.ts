@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractLineDocComment, extractBlockDocComment } from './docCommentExtractor';
 
 /**
  * Rust-specific compactor.
@@ -54,9 +55,15 @@ export class RustCompactor implements ICompactor {
   ): void {
     const indent = '    '.repeat(depth);
 
+    // Rust supports both `///` line doc-comments and `/** */` block doc-comments.
+    const doc =
+      extractLineDocComment(fileLines, symbol.range.startLine, '///') ||
+      extractBlockDocComment(fileLines, symbol.range.startLine);
+
     switch (symbol.kind) {
       case vscode.SymbolKind.Struct:
       case vscode.SymbolKind.Class:
+        if (doc) { lines.push(`${indent}/// ${doc}`); }
         // Check for derive macros
         const structAttrs = this.extractAttributes(fileLines, symbol.range.startLine);
         for (const attr of structAttrs) {
@@ -71,6 +78,7 @@ export class RustCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Enum:
+        if (doc) { lines.push(`${indent}/// ${doc}`); }
         const enumAttrs = this.extractAttributes(fileLines, symbol.range.startLine);
         for (const attr of enumAttrs) {
           lines.push(`${indent}${attr}`);
@@ -84,6 +92,7 @@ export class RustCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Interface:
+        if (doc) { lines.push(`${indent}/// ${doc}`); }
         // Rust traits
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
@@ -98,6 +107,7 @@ export class RustCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Module:
+        if (doc) { lines.push(`${indent}/// ${doc}`); }
         // impl blocks
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
@@ -109,6 +119,7 @@ export class RustCompactor implements ICompactor {
 
       case vscode.SymbolKind.Function:
       case vscode.SymbolKind.Method:
+        if (doc) { lines.push(`${indent}/// ${doc}`); }
         const fnAttrs = this.extractAttributes(fileLines, symbol.range.startLine);
         for (const attr of fnAttrs) {
           lines.push(`${indent}${attr}`);

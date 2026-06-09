@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractLineDocComment } from './docCommentExtractor';
 
 /**
  * Go-specific compactor.
@@ -52,8 +53,12 @@ export class GoCompactor implements ICompactor {
   ): void {
     const indent = '\t'.repeat(depth);
 
+    // Go convention: doc comments are `//` lines immediately above the symbol.
+    const doc = extractLineDocComment(fileLines, symbol.range.startLine, '//');
+
     switch (symbol.kind) {
       case vscode.SymbolKind.Struct:
+        if (doc) { lines.push(`${indent}// ${doc}`); }
         lines.push(`${indent}type ${symbol.name} struct {`);
         for (const child of symbol.children) {
           lines.push(`${indent}\t${child.signatureLine}`);
@@ -63,6 +68,7 @@ export class GoCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Interface:
+        if (doc) { lines.push(`${indent}// ${doc}`); }
         lines.push(`${indent}type ${symbol.name} interface {`);
         for (const child of symbol.children) {
           lines.push(`${indent}\t${child.signatureLine}`);
@@ -73,6 +79,7 @@ export class GoCompactor implements ICompactor {
 
       case vscode.SymbolKind.Function:
       case vscode.SymbolKind.Method:
+        if (doc) { lines.push(`${indent}// ${doc}`); }
         lines.push(`${indent}${symbol.signatureLine} { /* ... */ }`);
         break;
 
@@ -82,6 +89,7 @@ export class GoCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Class:
+        if (doc) { lines.push(`${indent}// ${doc}`); }
         // Go uses 'type X struct' — sometimes LSP reports classes
         lines.push(`${indent}type ${symbol.name} struct {`);
         for (const child of symbol.children) {

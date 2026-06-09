@@ -1,0 +1,180 @@
+{
+  "$comment": "Each entry: { file (relative to eval/fixtures/), question, signals[] }. A signal is a substring that MUST appear in the compacted output for the question to be answerable.",
+  "questions": [
+    {
+      "id": "py-1",
+      "file": "memory_manager.py",
+      "question": "What's the signature of MemoryManager.store?",
+      "signals": ["async def store(self, key: str, value: Any, ttl: Optional[int] = None) -> None"]
+    },
+    {
+      "id": "py-2",
+      "file": "memory_manager.py",
+      "question": "What's the default TTL for entries?",
+      "signals": ["DEFAULT_TTL = 86400"]
+    },
+    {
+      "id": "py-3",
+      "file": "memory_manager.py",
+      "question": "Which imports does the module use?",
+      "signals": ["import json", "from dataclasses import dataclass", "from typing import"]
+    },
+    {
+      "id": "py-4",
+      "file": "memory_manager.py",
+      "question": "Is MemoryEntry a dataclass?",
+      "signals": ["@dataclass", "class MemoryEntry"]
+    },
+    {
+      "id": "go-1",
+      "file": "gateway.go",
+      "question": "What's the package, and what error variables does it export?",
+      "signals": ["package gateway", "ErrNotFound", "ErrRateLimited"]
+    },
+    {
+      "id": "go-2",
+      "file": "gateway.go",
+      "question": "What's the signature of Gateway.RouteTraffic?",
+      "signals": ["func (g *Gateway) RouteTraffic(ctx context.Context, path string, w http.ResponseWriter, r *http.Request) error"]
+    },
+    {
+      "id": "go-3",
+      "file": "gateway.go",
+      "question": "What fields does RouteConfig have?",
+      "signals": ["type RouteConfig struct", "Path", "Handler", "RateLimit", "TimeoutMs"]
+    },
+    {
+      "id": "java-1",
+      "file": "UserController.java",
+      "question": "What's the base URL of UserController?",
+      "signals": ["@RequestMapping(\"/api/users\")", "public class UserController"]
+    },
+    {
+      "id": "java-2",
+      "file": "UserController.java",
+      "question": "What HTTP methods does the controller expose?",
+      "signals": ["@GetMapping", "@PostMapping", "@DeleteMapping"]
+    },
+    {
+      "id": "java-3",
+      "file": "UserController.java",
+      "question": "What's the signature of createUser?",
+      "signals": ["createUser(@RequestBody CreateUserRequest req)"]
+    },
+    {
+      "id": "rs-1",
+      "file": "config.rs",
+      "question": "What traits/structs does the config module define?",
+      "signals": ["pub struct ServerConfig", "pub struct AppConfig", "pub enum LogLevel", "pub trait ConfigLoader"]
+    },
+    {
+      "id": "rs-2",
+      "file": "config.rs",
+      "question": "Is JsonConfigLoader implementing ConfigLoader?",
+      "signals": ["impl ConfigLoader for JsonConfigLoader"]
+    },
+    {
+      "id": "rs-3",
+      "file": "config.rs",
+      "question": "Which derives are on ServerConfig?",
+      "signals": ["#[derive(Debug, Clone, Serialize, Deserialize)]", "pub struct ServerConfig"]
+    },
+    {
+      "id": "cs-1",
+      "file": "OrdersController.cs",
+      "question": "What's the route prefix and what attributes mark this as an API controller?",
+      "signals": ["[ApiController]", "[Route(\"api/[controller]\")]", "public class OrdersController"]
+    },
+    {
+      "id": "cs-2",
+      "file": "OrdersController.cs",
+      "question": "What's the signature of ListOrders?",
+      "signals": ["ListOrders", "page", "size"]
+    },
+    {
+      "id": "cs-3",
+      "file": "OrdersController.cs",
+      "question": "What HTTP verbs does the controller support?",
+      "signals": ["[HttpGet]", "[HttpPost]", "[HttpDelete"]
+    },
+    {
+      "id": "kt-1",
+      "file": "PaymentService.kt",
+      "question": "What's the public API of PaymentService?",
+      "signals": ["fun authorizePayment", "fun capturePayment", "fun refundPayment"]
+    },
+    {
+      "id": "kt-2",
+      "file": "PaymentService.kt",
+      "question": "Is PaymentService a Spring @Service?",
+      "signals": ["@Service", "class PaymentService"]
+    },
+    {
+      "id": "kt-3",
+      "file": "PaymentService.kt",
+      "question": "What states can a Payment be in?",
+      "signals": ["enum class PaymentStatus", "PENDING", "AUTHORIZED", "CAPTURED", "FAILED", "REFUNDED"]
+    },
+    {
+      "id": "ts-1",
+      "file": "auth_service.ts",
+      "question": "What does AuthRepository require?",
+      "signals": ["interface AuthRepository", "findUserByEmail", "saveToken", "findToken", "revokeToken"]
+    },
+    {
+      "id": "ts-2",
+      "file": "auth_service.ts",
+      "question": "What's the signature of AuthService.login?",
+      "signals": ["async login(email: string, password: string): Promise<AuthToken | null>"]
+    },
+    {
+      "id": "ts-3",
+      "file": "auth_service.ts",
+      "question": "Does AuthService expose Express middleware?",
+      "signals": ["middleware()"],
+      "knownLimitation": "Heuristic regex parser cannot reliably detect TS methods declared without an explicit return type or access modifier (e.g. `middleware()` instead of `public middleware(): X`). Needs a real AST (tsserver) to fix."
+    },
+    {
+      "id": "html-1",
+      "file": "landing.html",
+      "question": "What's the page title and meta description?",
+      "signals": ["<title>Acme — Ship Faster</title>", "name=\"description\""]
+    },
+    {
+      "id": "html-2",
+      "file": "landing.html",
+      "question": "What top-level sections does the landing page have?",
+      "signals": ["id=\"site-header\"", "id=\"hero\"", "id=\"features\"", "id=\"site-footer\""]
+    },
+    {
+      "id": "html-3",
+      "file": "landing.html",
+      "question": "Where does the hero signup form post to, and what fields does it have?",
+      "signals": ["action=\"/api/signup\"", "method=\"post\"", "name=\"email\"", "type=\"submit\""]
+    },
+    {
+      "id": "html-4",
+      "file": "landing.html",
+      "question": "What scripts and stylesheets does the page load?",
+      "signals": ["src=\"/js/analytics.js\"", "src=\"/js/app.js\"", "href=\"/styles/main.css\""]
+    },
+    {
+      "id": "css-1",
+      "file": "main.css",
+      "question": "What design tokens (CSS custom properties) does the stylesheet expose?",
+      "signals": ["--color-primary:", "--color-bg:", "--font-stack:", "--space-md:", "--radius-md:"]
+    },
+    {
+      "id": "css-2",
+      "file": "main.css",
+      "question": "What at-rules does the stylesheet use?",
+      "signals": ["@charset", "@import", "@media (max-width: 768px)", "@keyframes pulse"]
+    },
+    {
+      "id": "css-3",
+      "file": "main.css",
+      "question": "What component classes are styled?",
+      "signals": [".site-header", ".hero", ".features-grid", ".feature", ".btn"]
+    }
+  ]
+}
