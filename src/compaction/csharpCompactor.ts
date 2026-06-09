@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractLineDocComment } from './docCommentExtractor';
 
 /**
  * C#-specific compactor.
@@ -45,8 +46,11 @@ export class CSharpCompactor implements ICompactor {
   ): void {
     const indent = '    '.repeat(depth);
 
+    const doc = extractLineDocComment(fileLines, symbol.range.startLine, '///');
+
     switch (symbol.kind) {
       case vscode.SymbolKind.Namespace:
+        if (doc) { lines.push(`${indent}/// <summary>${doc}</summary>`); }
         lines.push(`${indent}${symbol.signatureLine}`);
         lines.push(`${indent}{`);
         for (const child of symbol.children) {
@@ -59,6 +63,7 @@ export class CSharpCompactor implements ICompactor {
       case vscode.SymbolKind.Class:
       case vscode.SymbolKind.Interface:
       case vscode.SymbolKind.Struct:
+        if (doc) { lines.push(`${indent}/// <summary>${doc}</summary>`); }
         const classAttributes = this.extractAttributes(fileLines, symbol.range.startLine);
         for (const attr of classAttributes) {
           lines.push(`${indent}${attr}`);
@@ -73,6 +78,7 @@ export class CSharpCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Enum:
+        if (doc) { lines.push(`${indent}/// <summary>${doc}</summary>`); }
         lines.push(`${indent}enum ${symbol.name}`);
         lines.push(`${indent}{`);
         for (const child of symbol.children) {
@@ -84,6 +90,7 @@ export class CSharpCompactor implements ICompactor {
 
       case vscode.SymbolKind.Method:
       case vscode.SymbolKind.Constructor:
+        if (doc) { lines.push(`${indent}/// <summary>${doc}</summary>`); }
         const methodAttributes = this.extractAttributes(fileLines, symbol.range.startLine);
         for (const attr of methodAttributes) {
           lines.push(`${indent}${attr}`);

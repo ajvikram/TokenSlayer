@@ -1,6 +1,6 @@
 {
   "name": "tokenslayer-mcp-server",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Standalone MCP Server for TokenSlayer",
   "type": "module",
   "main": "build/index.js",
@@ -9,10 +9,13 @@
   },
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "test": "node --test test/*.test.js",
+    "eval": "node eval/run.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.0"
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "gpt-tokenizer": "^3.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

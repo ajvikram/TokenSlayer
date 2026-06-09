@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The fastest way to ship a developer SaaS in 2026.">
+  <title>Acme — Ship Faster</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/styles/main.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <script src="/js/analytics.js" defer></script>
+  <script src="/js/app.js" type="module"></script>
+</head>
+<body>
+  <header id="site-header" class="site-header" role="banner">
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <a href="/" class="brand-link" data-testid="nav-home">Acme</a>
+      <ul class="nav-list">
+        <li><a href="/features">Features</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/blog">Blog</a></li>
+      </ul>
+      <a href="/signup" class="cta-btn" data-event="header-cta-click">Sign Up Free</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section id="hero" class="hero hero--gradient" data-section="hero">
+      <h1 class="hero-title">Ship your SaaS in days, not months.</h1>
+      <p class="hero-subtitle">Acme handles auth, billing, infra, and observability so your three-person team can focus on the product, not the plumbing.</p>
+      <form action="/api/signup" method="post" id="hero-signup-form" class="hero-form">
+        <label for="hero-email" class="sr-only">Email address</label>
+        <input type="email" id="hero-email" name="email" placeholder="you@startup.com" required autocomplete="email">
+        <button type="submit" class="btn btn--primary">Get Started</button>
+      </form>
+    </section>
+
+    <!-- Trust bar: shown only on desktop -->
+    <section id="trust" class="trust-bar" aria-label="Trusted by">
+      <p>Trusted by engineering teams at companies that ship to production every day.</p>
+    </section>
+
+    <section id="features" class="features-grid" data-testid="features-grid">
+      <article class="feature" data-feature="auth">
+        <h2>Auth in one line</h2>
+        <p>Drop-in OAuth, SSO, and passwordless. Compliant with SOC2 and GDPR out of the box, no checklist required.</p>
+      </article>
+      <article class="feature" data-feature="billing">
+        <h2>Billing that scales</h2>
+        <p>Stripe, Paddle, or your own payment processor. Subscriptions, metered usage, and dunning all included.</p>
+      </article>
+      <article class="feature" data-feature="observability">
+        <h2>Built-in observability</h2>
+        <p>Logs, traces, and metrics with no agent install. Query anything in plain English.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer" role="contentinfo">
+    <nav aria-label="Footer">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/security">Security</a>
+    </nav>
+    <p class="copyright">&copy; 2026 Acme, Inc.</p>
+  </footer>
+</body>
+</html>

@@ -151,6 +151,26 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       </div>
     </div>
 
+    <!-- Extended Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="totalTokensProcessed">0</div>
+        <div class="stat-label">Tokens Processed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value cost-value" id="estCostSaved"><$0.01</div>
+        <div class="stat-label">Est. Cost Saved</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="avgSavedPerFile">0</div>
+        <div class="stat-label">Avg Saved/File</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalAnalyses">0</div>
+        <div class="stat-label">Analyses</div>
+      </div>
+    </div>
+
     <!-- Workspace Coverage Ring -->
     <div class="section">
       <div class="section-title">Workspace Coverage</div>
@@ -254,6 +274,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     const filesAnalyzedEl = document.getElementById('filesAnalyzed');
     const cacheHitRateEl = document.getElementById('cacheHitRate');
     const cacheEntriesEl = document.getElementById('cacheEntries');
+    const totalTokensProcessedEl = document.getElementById('totalTokensProcessed');
+    const estCostSavedEl = document.getElementById('estCostSaved');
+    const avgSavedPerFileEl = document.getElementById('avgSavedPerFile');
+    const totalAnalysesEl = document.getElementById('totalAnalyses');
     const originalTokensEl = document.getElementById('originalTokens');
     const compactedTokensEl = document.getElementById('compactedTokens');
     const activityListEl = document.getElementById('activityList');
@@ -352,6 +376,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       typescript: '🔷', typescriptreact: '🔷',
       javascript: '🟡', javascriptreact: '🟡',
       python: '🐍', go: '🔵', java: '☕', rust: '🦀',
+      csharp: '🟪', kotlin: '🟠', html: '🌐', css: '🎨',
+      scss: '🎨', sass: '🎨', less: '🎨',
     };
 
     // Handle messages from extension
@@ -371,6 +397,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         filesAnalyzedEl.textContent = savings.filesAnalyzed.toString();
         cacheHitRateEl.textContent = cacheStats.hitRate + '%';
         cacheEntriesEl.textContent = cacheStats.totalEntries.toString();
+
+        // Extended stats
+        animateCounter(totalTokensProcessedEl, savings.totalOriginalTokens, 600);
+        estCostSavedEl.textContent = savings.estimatedCost ? savings.estimatedCost.label : '<$0.01';
+        animateCounter(avgSavedPerFileEl, savings.avgSavedPerFile || 0, 600);
+        totalAnalysesEl.textContent = savings.filesAnalyzed.toString();
 
         // Donut chart
         var circumference = 238.8;
@@ -399,7 +431,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           langChartEl.innerHTML = langStats.map(function(l) {
             var icon = langIcons[l.language] || '📄';
             var barWidth = Math.max(4, Math.round((l.savedTokens / maxSaved) * 100));
-            var displayName = l.language.replace('react', '').replace('typescript', 'TS').replace('javascript', 'JS').replace('python', 'Py').replace('java', 'Java').replace('rust', 'Rust').replace('go', 'Go');
+            var displayName = l.language.replace('react', '').replace('typescript', 'TS').replace('javascript', 'JS').replace('python', 'Py').replace('java', 'Java').replace('rust', 'Rust').replace('go', 'Go').replace('csharp', 'C#').replace('kotlin', 'Kt').replace('html', 'HTML').replace('css', 'CSS').replace('scss', 'SCSS').replace('sass', 'Sass').replace('less', 'Less');
             return '<div class="lang-row">'
               + '<span class="lang-icon">' + icon + '</span>'
               + '<span class="lang-name">' + displayName + '</span>'

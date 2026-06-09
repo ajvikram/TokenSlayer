@@ -139,17 +139,63 @@ export class PythonCompactor implements ICompactor {
       }
     }
 
-    // Only keep important decorators
-    return decorators.filter(d =>
-      d.startsWith('@dataclass') ||
-      d.startsWith('@property') ||
-      d.startsWith('@staticmethod') ||
-      d.startsWith('@classmethod') ||
-      d.startsWith('@abstractmethod') ||
-      d.startsWith('@app.') ||
-      d.startsWith('@router.') ||
-      d.startsWith('@pytest.')
-    );
+    return decorators.filter(d => PythonCompactor.isSignificantDecorator(d));
+  }
+
+  /**
+   * Decide whether a decorator carries enough signal to keep in the skeleton.
+   *
+   * Heuristic:
+   *   1. Drop private decorators (`@_foo` / `@__foo`) — usually internal helpers.
+   *   2. Keep an explicit allow-list of widely-used decorators that change
+   *      semantics or register the function with a framework (route handlers,
+   *      fixtures, abstract markers, cache wrappers, etc.).
+   *   3. Keep any *qualified* decorator (`@module.name`) — framework
+   *      decorators almost always look like this and act as registration
+   *      pragmas the LLM needs to see.
+   */
+  static isSignificantDecorator(d: string): boolean {
+    const body = d.replace(/^@/, '');
+    if (body.startsWith('_')) { return false; }
+
+    const allowedBare = [
+      // stdlib: dataclasses
+      'dataclass',
+      // stdlib: builtins / standard descriptor protocol
+      'property', 'staticmethod', 'classmethod', 'abstractmethod',
+      // stdlib: functools
+      'cache', 'cached_property', 'lru_cache', 'wraps', 'singledispatch',
+      'singledispatchmethod', 'total_ordering', 'reduce',
+      // stdlib: typing (PEP 484, 591, 593, 698)
+      'overload', 'final', 'override', 'runtime_checkable', 'no_type_check',
+      // stdlib: contextlib
+      'contextmanager', 'asynccontextmanager',
+      // stdlib: enum
+      'unique', 'verify',
+      // Django
+      'login_required', 'permission_required', 'user_passes_test',
+      'require_http_methods', 'require_GET', 'require_POST', 'require_safe',
+      'csrf_exempt', 'csrf_protect', 'ensure_csrf_cookie',
+      'cache_page', 'never_cache', 'cache_control', 'vary_on_cookie',
+      'vary_on_headers', 'method_decorator', 'receiver',
+      // Celery
+      'task', 'shared_task', 'periodic_task',
+      // tenacity / retry
+      'retry',
+      // pytest bare markers (rare but possible)
+      'fixture',
+    ];
+
+    for (const name of allowedBare) {
+      if (body === name || body.startsWith(name + '(')) { return true; }
+    }
+
+    // Qualified decorator: @module.name(...) — almost always a framework
+    // registration (FastAPI routes, Flask blueprints, click commands,
+    // pytest marks, celery tasks, SQLAlchemy events, etc.).
+    if (/^[A-Za-z][\w]*\.[A-Za-z]/.test(body)) { return true; }
+
+    return false;
   }
 
   /**

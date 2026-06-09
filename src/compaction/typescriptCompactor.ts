@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractBlockDocComment } from './docCommentExtractor';
 
 /**
  * TypeScript/JavaScript/React compactor.
@@ -12,7 +13,8 @@ export class TypeScriptCompactor implements ICompactor {
   compact(symbols: StructuralSymbol[], fileContent: string, filePath: string): string {
     const lines: string[] = [];
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
-    const totalLines = fileContent.split('\n').length;
+    const fileLines = fileContent.split('\n');
+    const totalLines = fileLines.length;
 
     // Extract imports (compacted)
     const imports = this.extractImports(fileContent);
@@ -26,7 +28,7 @@ export class TypeScriptCompactor implements ICompactor {
 
     // Process top-level symbols
     for (const symbol of symbols) {
-      this.processSymbol(symbol, lines, 0, fileContent);
+      this.processSymbol(symbol, lines, 0, fileLines);
     }
 
     const skeletonLines = lines.filter(l => l.trim().length > 0).length;
@@ -39,21 +41,24 @@ export class TypeScriptCompactor implements ICompactor {
     symbol: StructuralSymbol,
     lines: string[],
     depth: number,
-    fileContent: string
+    fileLines: string[]
   ): void {
     const indent = '  '.repeat(depth);
+    const doc = extractBlockDocComment(fileLines, symbol.range.startLine);
 
     switch (symbol.kind) {
       case vscode.SymbolKind.Class:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
-          this.processSymbol(child, lines, depth + 1, fileContent);
+          this.processSymbol(child, lines, depth + 1, fileLines);
         }
         lines.push(`${indent}}`);
         lines.push('');
         break;
 
       case vscode.SymbolKind.Interface:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
           // For interfaces, keep full property definitions
@@ -64,6 +69,7 @@ export class TypeScriptCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Enum:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}enum ${symbol.name} {`);
         for (const child of symbol.children) {
           lines.push(`${indent}  ${child.name},`);
@@ -73,11 +79,13 @@ export class TypeScriptCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Function:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} { /* ... */ }`);
         break;
 
       case vscode.SymbolKind.Method:
       case vscode.SymbolKind.Constructor:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} { /* ... */ }`);
         break;
 
@@ -96,9 +104,10 @@ export class TypeScriptCompactor implements ICompactor {
 
       case vscode.SymbolKind.Module:
       case vscode.SymbolKind.Namespace:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
-          this.processSymbol(child, lines, depth + 1, fileContent);
+          this.processSymbol(child, lines, depth + 1, fileLines);
         }
         lines.push(`${indent}}`);
         lines.push('');

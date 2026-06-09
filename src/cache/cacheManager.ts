@@ -216,6 +216,11 @@ export class CacheManager {
    */
   getSavings(): TokenSavings {
     const totalSaved = this.totalOriginalTokens - this.totalCompactedTokens;
+    const fileCount = this.analyzedFilePaths.size;
+    const m = totalSaved / 1_000_000;
+    const gpt4o = Math.round(m * 2.50 * 100) / 100;
+    const claudeSonnet = Math.round(m * 3.00 * 100) / 100;
+    const best = Math.max(gpt4o, claudeSonnet);
     return {
       totalOriginalTokens: this.totalOriginalTokens,
       totalCompactedTokens: this.totalCompactedTokens,
@@ -227,6 +232,12 @@ export class CacheManager {
                 100
             )
           : 0,
+      avgSavedPerFile: fileCount > 0 ? Math.round(totalSaved / fileCount) : 0,
+      estimatedCost: {
+        gpt4o,
+        claudeSonnet,
+        label: best < 0.01 ? '<$0.01' : `~$${best.toFixed(2)}`,
+      },
       filesAnalyzed: this.recentAnalyses.length,
       cacheHits: this.hitCount,
       cacheMisses: this.missCount,

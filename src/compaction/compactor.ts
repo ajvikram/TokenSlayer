@@ -1,5 +1,6 @@
 import { CompactedResult, StructuralSymbol } from '../types';
 import { TokenEstimator } from '../utils/tokenEstimator';
+import { optimizeLayout, getTargetModel } from '../utils/layoutOptimizer';
 import { Logger } from '../utils/logger';
 import { TypeScriptCompactor } from './typescriptCompactor';
 import { PythonCompactor } from './pythonCompactor';
@@ -8,6 +9,8 @@ import { JavaCompactor } from './javaCompactor';
 import { RustCompactor } from './rustCompactor';
 import { CSharpCompactor } from './csharpCompactor';
 import { KotlinCompactor } from './kotlinCompactor';
+import { HtmlCompactor } from './htmlCompactor';
+import { CssCompactor } from './cssCompactor';
 
 const logger = Logger.getInstance();
 
@@ -41,6 +44,8 @@ export class CompactorFactory {
     new RustCompactor(),
     new CSharpCompactor(),
     new KotlinCompactor(),
+    new HtmlCompactor(),
+    new CssCompactor(),
   ];
 
   /**
@@ -80,6 +85,11 @@ export class CompactorFactory {
     } else {
       logger.debug(`No specific compactor for ${languageId}, using generic skeleton`);
       skeleton = skeletonFallback;
+    }
+
+    const targetModel = getTargetModel();
+    if (targetModel) {
+      skeleton = optimizeLayout(skeleton, targetModel);
     }
 
     const compactedTokens = TokenEstimator.estimate(skeleton);

@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -60,6 +60,26 @@
         "command": "tokenslayer.exportReport",
         "title": "TokenSlayer: Export Savings Report",
         "icon": "$(markdown)"
+      },
+      {
+        "command": "tokenslayer.wireUpCopilot",
+        "title": "TokenSlayer: Wire Up Copilot",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "tokenslayer.wireUpTool",
+        "title": "TokenSlayer: Wire Up AI Tool",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "tokenslayer.analyzeDependencyChain",
+        "title": "TokenSlayer: Analyze Dependency Chain",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "tokenslayer.applyPatch",
+        "title": "TokenSlayer: Apply Structural Patch",
+        "icon": "$(diff)"
       }
     ],
     "viewsContainers": {
@@ -108,7 +128,7 @@
           "architecture",
           "navigation"
         ],
-        "modelDescription": "Get a compact structural summary of source code files including class hierarchies, function signatures, and type relationships. Use this tool instead of reading raw files when you need to understand code architecture, find where things are defined, or navigate large codebases. Returns compressed AST skeletons that capture the structure without implementation details, saving 40-95% of tokens compared to reading raw files.",
+        "modelDescription": "Get a compact AST skeleton of source code (class hierarchies, function signatures, exports, type relationships). Call this BEFORE read_file for: 'how is X structured', 'where is Y defined', 'show me the class hierarchy', 'what does the module export', 'map this directory', 'workspace overview'. Returns 5-10% of the token cost of reading raw files. Skip this tool when: you already have the exact file + line range, the file is under ~20 lines, or the user explicitly asked for raw source. For implementation edits: call this first to locate the symbol, then read the specific line range you need to modify — do not read entire files cold.",
         "userDescription": "Analyzes source code and returns a compact structural skeleton with class hierarchies, function signatures, and type relationships — saving 40-95% of tokens.",
         "icon": "$(symbol-structure)",
         "inputSchema": {
@@ -123,9 +143,10 @@
               "enum": [
                 "file",
                 "directory",
-                "workspace"
+                "workspace",
+                "dependency-chain"
               ],
-              "description": "Scope of analysis. 'file' for a single file, 'directory' for all files in a directory, 'workspace' for the full workspace. Defaults to 'file'."
+              "description": "Scope of analysis. 'file' for a single file, 'directory' for all files in a directory, 'workspace' for the full workspace, 'dependency-chain' for the file and its local imports (BFS). Defaults to 'file'."
             },
             "verbosity": {
               "type": "string",
@@ -135,11 +156,63 @@
                 "detailed"
               ],
               "description": "Level of detail. 'minimal' = signatures only. 'standard' = signatures + first-line docs. 'detailed' = signatures + docs + imports. Defaults to 'standard'."
+            },
+            "targetModel": {
+              "type": "string",
+              "description": "Target LLM model for BPE-aware layout optimization. E.g. 'gpt-4o', 'gpt-4', 'claude'. Optimizes indentation and whitespace to reduce token count."
             }
           }
         },
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "tokenslayer-structural-summary"
+      },
+      {
+        "name": "tokenslayer-apply-patch",
+        "displayName": "Apply Structural Patch",
+        "tags": [
+          "code-edit",
+          "refactoring",
+          "patching"
+        ],
+        "modelDescription": "Apply structural patches to source code using node IDs from a previous tokenslayer-structural-summary call. Each skeleton element is tagged with /* NODE:id */ markers. Use this tool to replace, insert after, or delete code blocks by referencing their node ID. Supports dry-run mode to preview diffs before applying.",
+        "userDescription": "Apply structural code patches using node IDs from skeleton analysis. Supports replace, insert_after, and delete operations with dry-run preview.",
+        "icon": "$(diff)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "patches": {
+              "type": "array",
+              "description": "Array of patch operations. Each patch has a nodeId (from /* NODE:id */ markers), action (replace/insert_after/delete), and optional content.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "nodeId": {
+                    "type": "string",
+                    "description": "The node ID from a /* NODE:id */ marker in the skeleton output."
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": ["replace", "insert_after", "delete"],
+                    "description": "The patch action to perform."
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "The new code content (required for replace and insert_after)."
+                  }
+                },
+                "required": ["nodeId", "action"]
+              }
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "If true (default), returns the unified diff without modifying files. Set to false to apply changes.",
+              "default": true
+            }
+          },
+          "required": ["patches"]
+        },
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "tokenslayer-apply-patch"
       }
     ],
     "configuration": {
@@ -176,6 +249,25 @@
           ],
           "default": "standard",
           "description": "Default verbosity for skeleton generation."
+        },
+        "tokenslayer.targetModel": {
+          "type": "string",
+          "enum": [
+            "",
+            "gpt-4o",
+            "gpt-4",
+            "claude",
+            "auto"
+          ],
+          "default": "",
+          "description": "Target LLM model for BPE-aware layout optimization. Leave empty to disable. When set, skeletons are optimized to reduce token count for the specified model's tokenizer."
+        },
+        "tokenslayer.dependencyChainDepth": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Maximum import-follow depth for dependency chain analysis."
         }
       }
     }
@@ -185,7 +277,9 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src",
-    "test": "node ./out/test/runTest.js"
+    "test": "npm run test:unit",
+    "test:unit": "npm run compile && node --require ./test/_setup.js --test test/*.test.js",
+    "test:e2e": "node ./out/test/runTest.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -193,7 +287,7 @@
     "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
-    "@vscode/vsce": "^3.0.0",
+    "@vscode/vsce": "^2.21.1",
     "eslint": "^9.39.4",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.58.2"

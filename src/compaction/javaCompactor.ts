@@ -1,6 +1,7 @@
 import { ICompactor } from './compactor';
 import { StructuralSymbol } from '../types';
 import * as vscode from 'vscode';
+import { extractBlockDocComment } from './docCommentExtractor';
 
 /**
  * Java-specific compactor.
@@ -52,8 +53,11 @@ export class JavaCompactor implements ICompactor {
   ): void {
     const indent = '    '.repeat(depth);
 
+    const doc = extractBlockDocComment(fileLines, symbol.range.startLine);
+
     switch (symbol.kind) {
       case vscode.SymbolKind.Class:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         // Check for annotations
         const classAnnotations = this.extractAnnotations(fileLines, symbol.range.startLine);
         for (const ann of classAnnotations) {
@@ -68,6 +72,7 @@ export class JavaCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Interface:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}${symbol.signatureLine} {`);
         for (const child of symbol.children) {
           lines.push(`${indent}    ${child.signatureLine};`);
@@ -77,6 +82,7 @@ export class JavaCompactor implements ICompactor {
         break;
 
       case vscode.SymbolKind.Enum:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         lines.push(`${indent}enum ${symbol.name} {`);
         for (const child of symbol.children) {
           lines.push(`${indent}    ${child.name},`);
@@ -87,6 +93,7 @@ export class JavaCompactor implements ICompactor {
 
       case vscode.SymbolKind.Method:
       case vscode.SymbolKind.Constructor:
+        if (doc) { lines.push(`${indent}/** ${doc} */`); }
         // Check for annotations like @Override, @Transactional, etc.
         const methodAnnotations = this.extractAnnotations(fileLines, symbol.range.startLine);
         for (const ann of methodAnnotations) {
