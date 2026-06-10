@@ -16,13 +16,22 @@ export class SymbolExtractor {
    */
   async extractFromUri(uri: vscode.Uri): Promise<StructuralSymbol[]> {
     try {
-      const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-        'vscode.executeDocumentSymbolProvider',
-        uri
-      );
+      // Language servers (gopls, jdtls, kotlin-language-server) often return
+      // nothing while still indexing — retry briefly before giving up.
+      let symbols: vscode.DocumentSymbol[] | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+          'vscode.executeDocumentSymbolProvider',
+          uri
+        );
+        if (symbols && symbols.length > 0) { break; }
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+      }
 
       if (!symbols || symbols.length === 0) {
-        logger.debug(`No symbols found for ${uri.fsPath}`);
+        logger.debug(`No symbols found for ${uri.fsPath} (provider missing or still indexing)`);
         return [];
       }
 

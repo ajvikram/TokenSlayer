@@ -17,7 +17,16 @@ import {
   SwiftCompactor,
   SqlCompactor,
   VueSvelteCompactor,
+  fallbackSkeleton,
 } from './lineBasedCompactor';
+
+// Languages whose compactor is driven by document symbols; when the language
+// server provides none, fall back to line-based parsing instead of emitting
+// an imports-only skeleton.
+const SYMBOL_DRIVEN_LANGUAGES = new Set([
+  'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
+  'python', 'go', 'java', 'rust', 'csharp', 'kotlin',
+]);
 
 const logger = Logger.getInstance();
 
@@ -91,7 +100,19 @@ export class CompactorFactory {
     let skeleton: string;
 
     const compactor = this.getCompactor(languageId);
-    if (compactor) {
+    if (compactor && symbols.length === 0 && SYMBOL_DRIVEN_LANGUAGES.has(languageId)) {
+      // Language server gave us nothing (not installed, or still indexing).
+      // A symbol-driven compactor would emit an imports-only skeleton here.
+      logger.warn(`No symbols for ${filePath} — using line-based fallback parser`);
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      const totalLines = fileContent.split('\n').length;
+      let body = fallbackSkeleton(languageId, fileContent);
+      if (body.length >= fileContent.length) {
+        body = fileContent;
+      }
+      const bodyLines = body.split('\n').filter(l => l.trim().length > 0).length;
+      skeleton = [`// ${fileName} (${totalLines} lines → ${bodyLines}-line skeleton)`, '', body].join('\n');
+    } else if (compactor) {
       logger.debug(`Using ${languageId} compactor for ${filePath}`);
       skeleton = compactor.compact(symbols, fileContent, filePath);
     } else {

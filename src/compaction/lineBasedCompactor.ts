@@ -32,23 +32,25 @@ function processCLike(content: string): string {
     /\b(const|let|var|val)\s/.test(str) && !str.includes('=>');
 
   const isSignature = (str: string): boolean => {
-    if (str.startsWith('import ') || str.startsWith('export ') && str.includes(' from ')) { return true; }
-    if (str.startsWith('@')) { return true; }
-    if (str.includes('class ') || str.includes('interface ') || str.includes('enum ') || str.includes('type ')) { return true; }
-    if (str.match(/(public\s+|private\s+|protected\s+|async\s+)*[\w<>\[\]]+\s+\w+\s*\(/) || str.match(/function\s+\w+\s*\(/)) { return true; }
-    if ((depth === 0 || depth === 1) && (str.includes('const ') || str.includes('let ') || str.includes('var '))) { return true; }
+    if (str.startsWith('import ') || str.startsWith('package ') || str.startsWith('using ') || str.startsWith('use ')) { return true; }
+    if (str.startsWith('export ') && str.includes(' from ')) { return true; }
+    if (str.startsWith('@') || str.startsWith('#[')) { return true; }
+    if (str.includes('class ') || str.includes('interface ') || str.includes('enum ') || str.includes('struct ') || str.includes('type ') || str.includes('record ') || str.includes('trait ')) { return true; }
+    if (str.match(/(public\s+|private\s+|protected\s+|async\s+)*[\w<>\[\]]+\s+\w+\s*\(/) || str.match(/function\s+\w+\s*\(/) || str.match(/^func\b/) || str.match(/\bfn\s+\w+\s*\(/) || str.match(/\bfun\s+\w+\s*\(/)) { return true; }
+    if (str.includes(' { get;') || str.includes(' { get ')) { return true; }
+    if ((depth === 0 || depth === 1) && (str.includes('const ') || str.includes('let ') || str.includes('var ') || str.includes('val '))) { return true; }
     return false;
   };
 
   const isFieldContainer = (str: string): boolean => {
     if (!str.endsWith('{')) { return false; }
-    if (/\b(interface|enum)\b/.test(str)) { return true; }
+    if (/\b(struct|interface|enum)\b/.test(str)) { return true; }
     return /\btype\s+\w+(<[^>]*>)?\s*=\s*\{$/.test(str);
   };
 
   const isWalkedContainer = (str: string): boolean => {
     if (!str.endsWith('{')) { return false; }
-    return /\bclass\b/.test(str);
+    return /\b(class|namespace|object|trait|impl|record)\b/.test(str);
   };
 
   const consumeBlock = (start: number, baseDepth: number, emit?: string[]): number => {
@@ -120,6 +122,52 @@ function processCLike(content: string): string {
   }
 
   return skeleton.join('\n');
+}
+
+// ─── Symbol-less fallbacks ──────────────────────────────────────────────────
+// Used when a language server provides no document symbols (not installed, or
+// still indexing) so AST-driven compactors would emit an imports-only skeleton.
+
+function processPythonLines(content: string): string {
+  const lines = content.split('\n');
+  const skeleton: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('import ') || trimmed.startsWith('from ') || trimmed.startsWith('@')) {
+      skeleton.push(line);
+      continue;
+    }
+    if (trimmed.startsWith('class ') || trimmed.startsWith('def ') || trimmed.startsWith('async def ')) {
+      let sig = line;
+      let j = i;
+      while (!sig.includes(':') && j < lines.length - 1) {
+        j++;
+        sig += ' ' + lines[j].trim();
+      }
+      i = j;
+      skeleton.push(sig + ' ...');
+      continue;
+    }
+    if (!line.startsWith(' ') && !line.startsWith('\t') && trimmed.includes('=') &&
+        !trimmed.startsWith('if ') && !trimmed.startsWith('for ') && !trimmed.startsWith('#')) {
+      skeleton.push(line);
+    }
+  }
+  return skeleton.join('\n');
+}
+
+/**
+ * Build a line-based skeleton for a language whose AST compactor got no
+ * symbols. Returns the skeleton body (no header).
+ */
+export function fallbackSkeleton(languageId: string, content: string): string {
+  if (languageId === 'python') {
+    return processPythonLines(content);
+  }
+  return processCLike(content);
 }
 
 // ─── HTML / CSS helpers (for Vue/Svelte blocks) ─────────────────────────────

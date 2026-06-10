@@ -5,6 +5,21 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-06-09
+
+### Fixed
+
+- **Go/Java/Kotlin no longer produce imports-only skeletons when the language
+  server is missing or still indexing.** Three-part fix: symbol extraction now
+  retries briefly during language-server warm-up; when no symbols arrive,
+  symbol-driven languages (TS/JS, Python, Go, Java, Rust, C#, Kotlin) fall back
+  to the line-based parser instead of emitting an empty skeleton; and
+  symbol-less results are never cached, so a degraded analysis can no longer
+  get pinned in the persisted cache. (Previously, analyzing a Go file before
+  gopls was ready cached an imports-only skeleton by content hash — permanently,
+  until the file changed or the cache was cleared. This is why the same
+  extension version could work on one machine and not another.)
+
 ## [0.5.0] — 2026-06-09
 
 ### Added

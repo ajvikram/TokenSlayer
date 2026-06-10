@@ -198,9 +198,15 @@ export class StructuralSummaryTool implements vscode.LanguageModelTool<Structura
       genericSkeleton
     );
 
-    // Cache the result
-    const contentHash = cacheKey.split('::')[1];
-    this.cacheManager.set(cacheKey, uri.fsPath, contentHash, result);
+    // Cache the result — but never cache a symbol-less analysis: it means the
+    // language server was missing or still indexing, and caching it would pin
+    // the degraded fallback skeleton until the file changes.
+    if (symbols.length > 0) {
+      const contentHash = cacheKey.split('::')[1];
+      this.cacheManager.set(cacheKey, uri.fsPath, contentHash, result);
+    } else {
+      logger.warn(`Not caching ${uri.fsPath} — no symbols available (will re-analyze next call)`);
+    }
 
     logger.info(
       `Analyzed ${uri.fsPath}: ${result.originalTokens} → ${result.compactedTokens} tokens (${result.reductionPercent}% reduction)`
