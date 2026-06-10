@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { scanForSecrets } from './secretsDetector.js';
 
 // ─── Tokenizer (lazy-loaded) ────────────────────────────────────────────────
 
@@ -123,12 +124,30 @@ function processCLike(content: string, language: string): string {
   const lines = content.split('\n');
   const skeleton: string[] = [];
   let depth = 0;
-  
+  // Depths at which we emitted a container's opening line and owe a closing brace.
+  const openContainers: number[] = [];
+
+  const braceDelta = (line: string): { opens: number; closes: number } => ({
+    opens: (line.match(/\{/g) || []).length,
+    closes: (line.match(/\}/g) || []).length,
+  });
+
+  // Keep the declaration and type annotation, drop the assigned value —
+  // hardcoded values (especially string literals) are where secrets live.
+  const stripAssignedValue = (line: string): string => {
+    const idx = line.search(/(?<![=!<>+\-*/%&|^])=(?![=>])/);
+    if (idx < 0) return line;
+    return `${line.slice(0, idx).trimEnd()};`;
+  };
+
+  const isValueDeclaration = (str: string): boolean =>
+    /\b(const|let|var|val)\s/.test(str) && !str.includes('=>');
+
   const isSignature = (str: string): boolean => {
     if (str.startsWith('import ') || str.startsWith('package ') || str.startsWith('using ') || str.startsWith('use ')) return true;
     if (str.startsWith('@') || str.startsWith('[') || str.startsWith('#[')) return true;
-    if (str.includes('class ') || str.includes('interface ') || str.includes('enum ') || str.includes('struct ') || str.includes('type ') || str.includes('record ')) return true;
-    if (str.match(/(public\s+|private\s+|protected\s+|async\s+)*[\w<>\[\]]+\s+\w+\s*\(/) || str.match(/func\s+\w+\s*\(/) || str.match(/fn\s+\w+\s*\(/) || str.match(/fun\s+\w+\s*\(/)) return true;
+    if (str.includes('class ') || str.includes('interface ') || str.includes('enum ') || str.includes('struct ') || str.includes('type ') || str.includes('record ') || str.includes('trait ') || /^(pub\s+)?impl\b/.test(str)) return true;
+    if (str.match(/(public\s+|private\s+|protected\s+|async\s+)*[\w<>\[\]]+\s+\w+\s*\(/) || str.match(/^func\b/) || str.match(/fn\s+\w+\s*\(/) || str.match(/fun\s+\w+\s*\(/)) return true;
     if (str.includes(' { get;') || str.includes(' { get ')) return true;
     if ((depth === 0 || depth === 1) && (str.includes('const ') || str.includes('let ') || str.includes('var ') || str.includes('val '))) return true;
     return false;
@@ -138,7 +157,32 @@ function processCLike(content: string, language: string): string {
   // For these we preserve the body verbatim instead of collapsing it.
   const isFieldContainer = (str: string): boolean => {
     if (!str.endsWith('{')) return false;
-    return /\b(struct|interface|enum)\b/.test(str);
+    if (/\b(struct|interface|enum)\b/.test(str)) return true;
+    return /\btype\s+\w+(<[^>]*>)?\s*=\s*\{$/.test(str);
+  };
+
+  // Containers whose children (methods, fields) we walk individually,
+  // emitting the real closing brace when the block ends.
+  const isWalkedContainer = (str: string): boolean => {
+    if (!str.endsWith('{')) return false;
+    return /\b(class|namespace|object|trait|impl|record)\b/.test(str);
+  };
+
+  // Advance past a brace-balanced block starting at lines[start]. Returns the
+  // index of the block's last line. When `emit` is given, body lines are
+  // copied to it verbatim.
+  const consumeBlock = (start: number, baseDepth: number, emit?: string[]): number => {
+    const first = braceDelta(lines[start] ?? '');
+    let d = baseDepth + first.opens - first.closes;
+    let i = start;
+    while (i + 1 < lines.length && d > baseDepth) {
+      i++;
+      const inner = lines[i] ?? '';
+      emit?.push(inner);
+      const delta = braceDelta(inner);
+      d += delta.opens - delta.closes;
+    }
+    return i;
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -147,39 +191,66 @@ function processCLike(content: string, language: string): string {
 
     if (trimmed === '' || trimmed.startsWith('//') || trimmed.startsWith('/*')) continue;
 
-    const openBraces = (line.match(/\{/g) || []).length;
-    const closeBraces = (line.match(/\}/g) || []).length;
+    const { opens, closes } = braceDelta(line);
+    const top = openContainers[openContainers.length - 1];
+    const inContainerBody = openContainers.length > 0 && depth === (top ?? 0) + 1;
 
     if (isSignature(trimmed) && depth <= 1) {
-      if (trimmed.endsWith('{') && isFieldContainer(trimmed)) {
-        // Preserve the entire body verbatim — field names/variants ARE the signal.
+      if (isFieldContainer(trimmed)) {
+        // Field names / variants ARE the signal — keep the body verbatim.
         skeleton.push(line);
-        let containerDepth = depth + openBraces - closeBraces;
-        let j = i + 1;
-        while (j < lines.length && containerDepth > depth) {
-          const inner = lines[j];
-          skeleton.push(inner);
-          containerDepth += (inner.match(/\{/g) || []).length;
-          containerDepth -= (inner.match(/\}/g) || []).length;
-          j++;
-        }
-        i = j - 1;
+        i = consumeBlock(i, depth, skeleton);
+        continue;
+      }
+      if (isWalkedContainer(trimmed)) {
+        skeleton.push(line);
+        openContainers.push(depth);
+        depth += opens - closes;
         continue;
       }
       if (trimmed.endsWith('{')) {
+        // Function/method: collapse the signature and skip the entire body so
+        // locals and object literals can never leak into the skeleton.
         skeleton.push(line + ' /* ... */ }');
-      } else {
-        skeleton.push(line);
+        i = consumeBlock(i, depth);
+        continue;
       }
-    } else if (openBraces > 0 && depth === 0) {
-      skeleton.push(line);
-    } else if (closeBraces > 0 && depth === 1) {
-      skeleton.push(line);
+      skeleton.push(isValueDeclaration(trimmed) ? stripAssignedValue(line) : line);
+      depth += opens - closes;
+      if (depth < 0) depth = 0;
+      continue;
     }
 
-    depth += openBraces;
-    depth -= closeBraces;
-    if (depth < 0) depth = 0;
+    if (inContainerBody) {
+      // Direct child of a walked container (class body, etc.).
+      if (trimmed.endsWith('{') && trimmed.includes('(')) {
+        // Method: collapse the signature, skip the body.
+        skeleton.push(line + ' /* ... */ }');
+        i = consumeBlock(i, depth);
+        continue;
+      }
+      if (
+        /^[A-Za-z_@#[]/.test(trimmed) &&
+        (trimmed.endsWith(';') || trimmed.endsWith('(') || /\)\s*:?\s*\w*$/.test(trimmed))
+      ) {
+        // Field, property, or the first line of a multi-line signature.
+        skeleton.push(trimmed.endsWith(';') ? stripAssignedValue(line) : line);
+        depth = Math.max(0, depth + opens - closes);
+        continue;
+      }
+    }
+
+    const newDepth = Math.max(0, depth + opens - closes);
+    // Emit a closing brace only when it closes a container we emitted open.
+    if (
+      closes > opens &&
+      openContainers.length > 0 &&
+      newDepth <= (openContainers[openContainers.length - 1] ?? 0)
+    ) {
+      openContainers.pop();
+      skeleton.push(line);
+    }
+    depth = newDepth;
   }
 
   return skeleton.join('\n');
@@ -1103,6 +1174,19 @@ export function analyzeFile(filePath: string): ParseResult {
     const lang = getLanguage(filePath);
     const originalLines = content.split('\n').length;
     const originalChars = content.length;
+
+    // Never let credentials flow into model context through a skeleton.
+    const secrets = scanForSecrets(filePath, content);
+    if (secrets.hasSecrets) {
+      return {
+        filePath,
+        originalTokens: 0,
+        compactedTokens: 0,
+        reductionPercent: 0,
+        skeleton: '',
+        error: `Excluded: secrets detected (${secrets.reasons.join('; ')})`
+      };
+    }
 
     if (lang === 'unknown') {
       return {

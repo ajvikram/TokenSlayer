@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
+import { LlmUsageTracker } from '../usage/llmUsageTracker';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -12,6 +13,7 @@ const logger = Logger.getInstance();
 export class DashboardProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'tokenslayer.dashboardView';
   private view?: vscode.WebviewView;
+  private llmUsageTracker = new LlmUsageTracker();
 
   constructor(
     private extensionUri: vscode.Uri,
@@ -88,6 +90,17 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     const timeline = this.cacheManager.getTimeline(30);
     const analyzedFileCount = this.cacheManager.getAnalyzedFileCount();
 
+    // Real LLM usage for this workspace, read from Claude Code transcripts.
+    let llmUsage = null;
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceRoot) {
+      try {
+        llmUsage = this.llmUsageTracker.getUsage(workspaceRoot);
+      } catch (err) {
+        logger.warn('Failed to read LLM usage from transcripts', err);
+      }
+    }
+
     this.view.webview.postMessage({
       type: 'update',
       savings,
@@ -99,6 +112,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       topSavers,
       timeline,
       analyzedFileCount,
+      llmUsage,
     });
   }
 
@@ -169,6 +183,40 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <div class="stat-value" id="totalAnalyses">0</div>
         <div class="stat-label">Analyses</div>
       </div>
+    </div>
+
+    <!-- LLM Usage (from Claude Code transcripts) -->
+    <div class="section">
+      <div class="section-title">
+        <span>🤖 LLM Tokens Used</span>
+        <span class="excluded-count" id="llmSessionCount">0 sessions</span>
+      </div>
+      <div id="llmUsageBody" style="display:none">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="llmInput">0</div>
+            <div class="stat-label">Input</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="llmOutput">0</div>
+            <div class="stat-label">Output</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="llmCacheRead">0</div>
+            <div class="stat-label">Cache Read</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="llmCacheWrite">0</div>
+            <div class="stat-label">Cache Write</div>
+          </div>
+        </div>
+        <div class="savings-bar-labels">
+          <span id="llmTotal">0 total</span>
+          <span id="llmLastActivity"></span>
+        </div>
+        <div class="lang-chart" id="llmModelChart"></div>
+      </div>
+      <div class="empty-state-small" id="llmEmpty">No Claude Code activity recorded for this workspace yet</div>
     </div>
 
     <!-- Workspace Coverage Ring -->
@@ -441,6 +489,43 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           }).join('');
         }
 
+        // LLM usage (Claude Code transcripts)
+        var llm = message.llmUsage;
+        var llmBody = document.getElementById('llmUsageBody');
+        var llmEmpty = document.getElementById('llmEmpty');
+        if (llm && llm.available && llm.totalTokens > 0) {
+          llmBody.style.display = '';
+          llmEmpty.style.display = 'none';
+          document.getElementById('llmSessionCount').textContent =
+            llm.sessionCount + (llm.sessionCount === 1 ? ' session' : ' sessions');
+          document.getElementById('llmInput').textContent = compactNum(llm.inputTokens);
+          document.getElementById('llmOutput').textContent = compactNum(llm.outputTokens);
+          document.getElementById('llmCacheRead').textContent = compactNum(llm.cacheReadTokens);
+          document.getElementById('llmCacheWrite').textContent = compactNum(llm.cacheCreationTokens);
+          document.getElementById('llmTotal').textContent = llm.totalTokens.toLocaleString() + ' total';
+          document.getElementById('llmLastActivity').textContent =
+            llm.lastActivity ? getTimeAgo(llm.lastActivity) : '';
+
+          var modelChart = document.getElementById('llmModelChart');
+          if (llm.byModel && llm.byModel.length > 0) {
+            var maxModel = llm.byModel[0].totalTokens || 1;
+            modelChart.innerHTML = llm.byModel.map(function(m) {
+              var name = m.model.replace(/^claude-/, '').replace(/-\\d{8}$/, '');
+              var barWidth = Math.max(4, Math.round((m.totalTokens / maxModel) * 100));
+              return '<div class="lang-row">'
+                + '<span class="lang-name" title="' + escapeHtml(m.model) + '">' + escapeHtml(name) + '</span>'
+                + '<div class="lang-bar-bg"><div class="lang-bar-fill" style="width:' + barWidth + '%"></div></div>'
+                + '<span class="lang-value">' + compactNum(m.totalTokens) + '</span>'
+                + '</div>';
+            }).join('');
+          } else {
+            modelChart.innerHTML = '';
+          }
+        } else {
+          llmBody.style.display = 'none';
+          llmEmpty.style.display = '';
+        }
+
         // Timeline sparkline
         drawTimeline(message.timeline);
 
@@ -524,6 +609,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         }
       }
     });
+
+    function compactNum(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 10000) return Math.round(n / 1000) + 'K';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return n.toString();
+    }
 
     function getTimeAgo(timestamp) {
       var seconds = Math.floor((Date.now() - timestamp) / 1000);

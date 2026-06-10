@@ -5,6 +5,52 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-06-09
+
+### Added
+
+- **Six new languages in the extension**: PHP, Ruby, Swift, SQL, Vue, and Svelte
+  now have line-based compactors (ported from the MCP server), closing the
+  language gap between the two surfaces. Auto-analyze, CodeLens, and
+  directory/workspace scans all cover the new languages.
+- **New `tokenslayer-expand-node` language model tool**. Skeletons tag every
+  element with `NODE:<id>` markers; Copilot can now pass one of those ids to
+  retrieve just that function or class body — no need to re-read the whole
+  file. Brings the extension to parity with the MCP server's `expand_node`.
+- **Real BPE token counting in the Tokenwise MCP sibling** (gpt-tokenizer with
+  chars/4 fallback), so reported savings match actual tokenizer output.
+
+- **LLM token usage in the dashboard**. New "🤖 LLM Tokens Used" section shows real
+  token consumption for the current workspace, aggregated from Claude Code session
+  transcripts (`~/.claude/projects/<workspace>/*.jsonl`): input, output, cache read,
+  cache write, total, per-model breakdown, session count, and last activity.
+  Transcripts are re-parsed only when they change, so the 5-second dashboard
+  refresh stays cheap. (VS Code exposes no API for Copilot's internal usage, so
+  Copilot requests are not included.)
+
+### Security
+
+- **MCP server now refuses to skeleton files containing secrets.** The extension's
+  SecretsDetector has been ported to the standalone MCP server: files matching
+  credential patterns (API keys, tokens, private keys, connection strings) or
+  sensitive filenames (`.env`, `*.pem`, `credentials.json`, …) return an
+  "Excluded: secrets detected" error instead of a skeleton.
+- **Assigned values are stripped from variable declarations and class fields**
+  in MCP skeletons (`const API_KEY = "sk-…"` → `const API_KEY;`), so hardcoded
+  values can no longer leak into model context even in files that pass the scan.
+
+### Fixed
+
+- **MCP server parser no longer leaks function bodies into skeletons.** Collapsed
+  functions are now skipped as whole blocks, so locals, object literals, and stray
+  closing braces can no longer appear in the output. Class bodies are walked
+  properly: fields kept, methods collapsed, closing brace emitted exactly once.
+- **`type X = { ... }` object-type bodies are preserved verbatim**, matching the
+  existing struct/interface/enum behavior.
+- **Go receiver methods** (`func (g *Gateway) Handle(...)`) and **Rust
+  `trait`/`impl` blocks** are now recognized as signatures; previously they only
+  survived by accident of the old brace heuristic.
+
 ## [0.4.0] — 2026-06-08
 
 ### Added

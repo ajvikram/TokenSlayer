@@ -11,6 +11,13 @@ import { CSharpCompactor } from './csharpCompactor';
 import { KotlinCompactor } from './kotlinCompactor';
 import { HtmlCompactor } from './htmlCompactor';
 import { CssCompactor } from './cssCompactor';
+import {
+  PhpCompactor,
+  RubyCompactor,
+  SwiftCompactor,
+  SqlCompactor,
+  VueSvelteCompactor,
+} from './lineBasedCompactor';
 
 const logger = Logger.getInstance();
 
@@ -46,6 +53,11 @@ export class CompactorFactory {
     new KotlinCompactor(),
     new HtmlCompactor(),
     new CssCompactor(),
+    new PhpCompactor(),
+    new RubyCompactor(),
+    new SwiftCompactor(),
+    new SqlCompactor(),
+    new VueSvelteCompactor(),
   ];
 
   /**

@@ -106,6 +106,16 @@ const window = {
 
 const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
 
+// ---- Language model tool plumbing ----------------------------------------
+
+class LanguageModelTextPart {
+  constructor(value) { this.value = value; }
+}
+
+class LanguageModelToolResult {
+  constructor(content) { this.content = content; }
+}
+
 // ---- Test-only introspection helpers (prefixed with __) ----------------
 
 function __setWorkspaceRoot(p) {
@@ -128,6 +138,8 @@ module.exports = {
   SymbolKind,
   Uri,
   FileType,
+  LanguageModelTextPart,
+  LanguageModelToolResult,
   workspace,
   window,
   __setWorkspaceRoot,

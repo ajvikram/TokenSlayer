@@ -218,9 +218,11 @@ export function helper(x: number): number {
     assert.ok(!r.skeleton.includes('return x + 1'));
   });
 
-  test('reduces token count by at least 30%', () => {
+  // Interface bodies are preserved verbatim (the fields are API), so the
+  // floor on this small sample is lower than the old field-eliding behavior.
+  test('reduces token count by at least 25%', () => {
     const r = analyze('user.ts', sample);
-    assert.ok(r.reductionPercent >= 30, `got ${r.reductionPercent}%`);
+    assert.ok(r.reductionPercent >= 25, `got ${r.reductionPercent}%`);
   });
 });
 
