@@ -37,14 +37,15 @@ With TokenSlayer:     8-line structural skeleton →    200 tokens consumed (96%
 | **Domain Compaction** | Language-specific compactors strip bodies, keep signatures | ~5ms (pure string ops) |
 | **Semantic Caching** | Content-hash LRU cache with file-watcher invalidation | Instant on repeat |
 
-#### 🔧 Copilot Integration (2 LM Tools)
+#### 🔧 Copilot Integration (3 LM Tools)
 
-Two [Language Model Tools](https://code.visualstudio.com/api/extension-guides/language-model-tool) that Copilot can call autonomously:
+Three [Language Model Tools](https://code.visualstudio.com/api/extension-guides/language-model-tool) that Copilot can call autonomously:
 
 | Tool | What It Does |
 |---|---|
 | `#tokenslayer-structural-summary` | Returns compact AST skeleton with `/* NODE:id */` markers. Supports `scope: "dependency-chain"` and `targetModel` for BPE optimization. |
 | `#tokenslayer-apply-patch` | Applies structural patches by node ID — `replace`, `insert_after`, `delete`. Returns a unified diff. |
+| `#tokenslayer-expand-node` | Expands a `NODE:<id>` marker back to that block's full source — drill into one function without re-reading the file. |
 
 ```
 @user: #tokenslayer-structural-summary How is authentication structured?
@@ -105,6 +106,7 @@ A real-time analytics dashboard with:
 - **⚡ Hero Counter** — Animated token savings counter with gradient text
 - **📈 Stats Grid** — Reduction %, files analyzed, cache hit rate, cached entries, tokens processed, avg saved/file
 - **💰 Estimated Cost Saved** — Real-time cost estimates for GPT-4o and Claude Sonnet based on actual token savings
+- **🤖 LLM Tokens Used** — Real token consumption for the workspace (input/output/cache, per-model breakdown), aggregated from Claude Code session transcripts
 - **🔵 Workspace Coverage Ring** — SVG circular progress showing analyzed vs total files
 - **🍩 Donut Chart** — Animated circular chart showing compaction ratio
 - **📊 Language Breakdown** — Horizontal bar chart with language icons (15 languages supported)
@@ -153,6 +155,11 @@ Automatically scans files for credentials and blocks them from LLM context:
 | **Sensitive Files** | `.env`, `.pem`, `.key`, `credentials.json`, `.htpasswd` |
 
 Excluded files appear in the dashboard with severity levels: 🔴 HIGH · 🟡 MEDIUM · 🟢 LOW
+
+The standalone MCP server enforces the same protection: flagged files return an
+`Excluded: secrets detected` error instead of a skeleton, and assigned values are
+stripped from variable declarations and class fields (`const API_KEY = "sk-…"` →
+`const API_KEY;`) so hardcoded values never reach model context.
 
 #### 📋 Export Report
 
