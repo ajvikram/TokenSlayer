@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CacheManager } from './cache/cacheManager';
 import { StructuralSummaryTool } from './tools/structuralSummaryTool';
 import { PatchTool } from './tools/patchTool';
+import { ExpandNodeTool } from './tools/expandNodeTool';
 import { DashboardProvider } from './views/dashboardProvider';
 import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
 import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
@@ -51,6 +52,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.lm.registerTool('tokenslayer-apply-patch', patchTool)
   );
   logger.info('Registered LM tool: tokenslayer-apply-patch');
+
+  const expandNodeTool = new ExpandNodeTool();
+  context.subscriptions.push(
+    vscode.lm.registerTool('tokenslayer-expand-node', expandNodeTool)
+  );
+  logger.info('Registered LM tool: tokenslayer-expand-node');
 
   // ─── 2b. Start Local Server (API) ─────────────────────────────────────────
   localServer = new LocalServer(cacheManager);
@@ -392,6 +399,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     { language: 'csharp' }, { language: 'kotlin' },
     { language: 'html' }, { language: 'css' },
     { language: 'scss' }, { language: 'less' },
+    { language: 'php' }, { language: 'ruby' },
+    { language: 'swift' }, { language: 'sql' },
+    { language: 'vue' }, { language: 'svelte' },
   ];
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(codeLensSelector, codeLensProvider)
@@ -408,6 +418,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     'typescript', 'javascript', 'typescriptreact', 'javascriptreact',
     'python', 'go', 'java', 'rust', 'csharp', 'kotlin',
     'html', 'css', 'scss', 'sass', 'less',
+    'php', 'ruby', 'swift', 'sql', 'vue', 'svelte',
   ]);
 
   // Helper: analyze a document and update UI

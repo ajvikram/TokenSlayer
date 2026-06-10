@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -192,7 +192,11 @@
                   },
                   "action": {
                     "type": "string",
-                    "enum": ["replace", "insert_after", "delete"],
+                    "enum": [
+                      "replace",
+                      "insert_after",
+                      "delete"
+                    ],
                     "description": "The patch action to perform."
                   },
                   "content": {
@@ -200,7 +204,10 @@
                     "description": "The new code content (required for replace and insert_after)."
                   }
                 },
-                "required": ["nodeId", "action"]
+                "required": [
+                  "nodeId",
+                  "action"
+                ]
               }
             },
             "dryRun": {
@@ -209,10 +216,37 @@
               "default": true
             }
           },
-          "required": ["patches"]
+          "required": [
+            "patches"
+          ]
         },
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "tokenslayer-apply-patch"
+      },
+      {
+        "name": "tokenslayer-expand-node",
+        "displayName": "Expand Skeleton Node",
+        "toolReferenceName": "tokenslayer-expand-node",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "code-structure",
+          "navigation"
+        ],
+        "modelDescription": "Expand a TokenSlayer skeleton node ID back to its full source code. Structural summaries tag every element with NODE:<id> (or EXPAND:<id>) markers; pass one of those ids to retrieve just that function/class body without re-reading the whole file. Use this after tokenslayer-structural-summary when you need the implementation of ONE specific symbol.",
+        "userDescription": "Expands a collapsed skeleton node back to its full source code.",
+        "icon": "$(expand-all)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "nodeId": {
+              "type": "string",
+              "description": "A node id taken from a NODE:<id> or EXPAND:<id> marker in a structural summary."
+            }
+          },
+          "required": [
+            "nodeId"
+          ]
+        }
       }
     ],
     "configuration": {

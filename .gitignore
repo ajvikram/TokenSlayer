@@ -1,4 +1,42 @@
+# Dependencies
 node_modules/
+
+# Build output
 out/
 *.vsix
+
+# TypeScript build artifacts in source dirs (outDir is build/)
+mcp-server/src/*.js
+mcp-server/src/*.js.map
+mcp-server/src/*.d.ts
+mcp-server/src/*.d.ts.map
+
+# VS Code test runner
 .vscode-test/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TokenSlayer stats (local data)
+.tokenslayer/
