@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -128,7 +128,7 @@
           "architecture",
           "navigation"
         ],
-        "modelDescription": "Get a compact AST skeleton of source code (class hierarchies, function signatures, exports, type relationships). Call this BEFORE read_file for: 'how is X structured', 'where is Y defined', 'show me the class hierarchy', 'what does the module export', 'map this directory', 'workspace overview'. Returns 5-10% of the token cost of reading raw files. Skip this tool when: you already have the exact file + line range, the file is under ~20 lines, or the user explicitly asked for raw source. For implementation edits: call this first to locate the symbol, then read the specific line range you need to modify — do not read entire files cold.",
+        "modelDescription": "Get a compact AST skeleton of source code (class hierarchies, function signatures, exports, type relationships). Call this BEFORE read_file for: 'how is X structured', 'where is Y defined', 'show me the class hierarchy', 'what does the module export', 'map this directory', 'workspace overview'. Returns 5-10% of the token cost of reading raw files. Skip this tool when: you already have the exact file + line range, the file is under ~20 lines, the target is a JSON/config/markdown file (no code structure to compact — read it directly), or the user explicitly asked for raw source. For implementation edits: call this first to locate the symbol, then read the specific line range you need to modify — do not read entire files cold.",
         "userDescription": "Analyzes source code and returns a compact structural skeleton with class hierarchies, function signatures, and type relationships — saving 40-95% of tokens.",
         "icon": "$(symbol-structure)",
         "inputSchema": {

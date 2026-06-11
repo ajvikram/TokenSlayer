@@ -68,7 +68,7 @@ class TokenSlayerServer {
       tools: [
         {
           name: "analyze_files",
-          description: "Analyze file paths to extract high-density structural skeletons. Supports symbol-level addressing, query ranking, budget constraints, JSON output, and expandable node IDs.",
+          description: "Extract compact structural skeletons (signatures, types, exports — no bodies) at ~5-10% of the token cost of reading files raw. Call this when you need to understand how code is organized in large or unfamiliar source files: 'how is X structured', 'where is Y defined', 'what does this module export', or before planning a multi-file change. Do NOT call this when you already know which file (and roughly where) the answer is, for small files, or for JSON/config/markdown lookups — a targeted read or grep is cheaper. Supports symbol-level addressing, query ranking, budget constraints, JSON output, and expandable node IDs; after locating a symbol, use expand_node or read just that range instead of the whole file.",
           inputSchema: {
             type: "object",
             properties: {
@@ -109,7 +109,7 @@ class TokenSlayerServer {
         },
         {
           name: "analyze_workspace",
-          description: "Map an entire workspace directory. Recursively finds supported files and returns structural skeletons. Supports query-based ranking to surface the most relevant files first.",
+          description: "Recursively map a directory into structural skeletons. Call this ONLY for genuinely repo-wide orientation: onboarding to an unfamiliar codebase, 'map this project', or planning a change that touches many files in unknown locations. Do NOT call this to answer a question about a specific file, symbol, or config value — a targeted grep/read (or analyze_files on the few relevant files) is cheaper than scanning the whole workspace. Not useful for JSON/config/markdown content. Supports query-based ranking to surface the most relevant files first.",
           inputSchema: {
             type: "object",
             properties: {
@@ -145,7 +145,7 @@ class TokenSlayerServer {
         },
         {
           name: "analyze_dependency_chain",
-          description: "Follow imports from a seed file to build a merged skeleton of the dependency chain. Traverses local (relative) imports via BFS up to the specified depth.",
+          description: "Follow imports from a seed file to build a merged skeleton of its local dependency chain (BFS up to the specified depth). Call this when you need to understand how a module connects to the rest of the codebase before a cross-file change. Do NOT call this for single-file questions or when you already know which files are involved — analyze_files on those files (or a direct read) is cheaper.",
           inputSchema: {
             type: "object",
             properties: {

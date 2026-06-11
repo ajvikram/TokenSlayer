@@ -5,6 +5,23 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-06-11
+
+### Changed
+
+- **Tool descriptions now tell the model when NOT to use TokenSlayer.**
+  End-to-end benchmarking (SpendBench) showed agents invoked `analyze_workspace`
+  even for trivial single-file lookups, adding 37–55% cost overhead with zero
+  benefit — the description was all trigger, no anti-trigger. All MCP tool
+  descriptions (`analyze_files`, `analyze_workspace`, `analyze_dependency_chain`)
+  and the extension's `tokenslayer-structural-summary` model description now
+  include explicit skip guidance: don't use the tools when the target file is
+  already known, for small files, or for JSON/config/markdown content (no code
+  structure to compact — a direct read/grep is cheaper). After the change,
+  measured overhead on trivial tasks dropped to ~2–6% while large-file
+  orientation retained its full benefit (~60% fewer tokens, ~2.5× faster than
+  baseline on a 17k-line file task).
+
 ## [0.5.1] — 2026-06-09
 
 ### Fixed
