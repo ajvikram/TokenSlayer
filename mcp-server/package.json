@@ -1,6 +1,6 @@
 {
   "name": "tokenslayer-mcp-server",
-  "version": "3.1.0",
+  "version": "1.0.0",
   "description": "Standalone MCP Server for TokenSlayer",
   "type": "module",
   "main": "build/index.js",

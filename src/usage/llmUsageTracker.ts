@@ -17,6 +17,8 @@ export interface LlmUsageTotals {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  /** Number of API requests (assistant messages carrying a usage block). */
+  requests: number;
 }
 
 export interface ModelUsage extends LlmUsageTotals {
@@ -43,7 +45,7 @@ interface FileCacheEntry {
 }
 
 function emptyTotals(): LlmUsageTotals {
-  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, requests: 0 };
 }
 
 /**
@@ -86,6 +88,7 @@ export function parseTranscriptText(text: string): {
     totals.outputTokens += usage.output_tokens ?? 0;
     totals.cacheReadTokens += usage.cache_read_input_tokens ?? 0;
     totals.cacheCreationTokens += usage.cache_creation_input_tokens ?? 0;
+    totals.requests += 1;
     perModel.set(model, totals);
 
     if (entry.timestamp) {
@@ -164,6 +167,7 @@ export class LlmUsageTracker {
         acc.outputTokens += totals.outputTokens;
         acc.cacheReadTokens += totals.cacheReadTokens;
         acc.cacheCreationTokens += totals.cacheCreationTokens;
+        acc.requests += totals.requests;
         merged.set(model, acc);
       }
     }
@@ -175,6 +179,7 @@ export class LlmUsageTracker {
       sum.outputTokens += totals.outputTokens;
       sum.cacheReadTokens += totals.cacheReadTokens;
       sum.cacheCreationTokens += totals.cacheCreationTokens;
+      sum.requests += totals.requests;
       byModel.push({
         model,
         ...totals,
