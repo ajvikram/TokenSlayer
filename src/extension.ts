@@ -18,6 +18,7 @@ import { TokenEstimator } from './utils/tokenEstimator';
 import { buildDependencyChain } from './utils/importResolver';
 import { applyPatches, Patch } from './utils/structuralPatch';
 import { Logger } from './utils/logger';
+import { ToolInvocationTracker, withTakeup } from './usage/toolInvocationTracker';
 import { Verbosity } from './types';
 
 const logger = Logger.getInstance();
@@ -40,22 +41,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ─── 1b. Initialize tokenizer in background (non-blocking) ──────────
   TokenEstimator.initAsync();
 
-  // ─── 2. Register LM Tool ───────────────────────────────────────────────
+  // ─── 2. Register LM Tools (wrapped with per-workspace take-up counting) ──
+  const toolTracker = new ToolInvocationTracker(context.workspaceState);
+
   const structuralSummaryTool = new StructuralSummaryTool(cacheManager);
   context.subscriptions.push(
-    vscode.lm.registerTool('tokenslayer-structural-summary', structuralSummaryTool)
+    vscode.lm.registerTool('tokenslayer-structural-summary',
+      withTakeup(toolTracker, 'tokenslayer-structural-summary', structuralSummaryTool))
   );
   logger.info('Registered LM tool: tokenslayer-structural-summary');
 
   const patchTool = new PatchTool();
   context.subscriptions.push(
-    vscode.lm.registerTool('tokenslayer-apply-patch', patchTool)
+    vscode.lm.registerTool('tokenslayer-apply-patch',
+      withTakeup(toolTracker, 'tokenslayer-apply-patch', patchTool))
   );
   logger.info('Registered LM tool: tokenslayer-apply-patch');
 
   const expandNodeTool = new ExpandNodeTool();
   context.subscriptions.push(
-    vscode.lm.registerTool('tokenslayer-expand-node', expandNodeTool)
+    vscode.lm.registerTool('tokenslayer-expand-node',
+      withTakeup(toolTracker, 'tokenslayer-expand-node', expandNodeTool))
   );
   logger.info('Registered LM tool: tokenslayer-expand-node');
 
@@ -67,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   // ─── 3. Register Dashboard View ─────────────────────────────────────────
-  dashboardProvider = new DashboardProvider(context.extensionUri, cacheManager);
+  dashboardProvider = new DashboardProvider(context.extensionUri, cacheManager, toolTracker);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       DashboardProvider.viewType,

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
 import { LlmUsageTracker } from '../usage/llmUsageTracker';
+import { ToolInvocationTracker } from '../usage/toolInvocationTracker';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -17,7 +18,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private extensionUri: vscode.Uri,
-    private cacheManager: CacheManager
+    private cacheManager: CacheManager,
+    private toolTracker?: ToolInvocationTracker
   ) {}
 
   resolveWebviewView(
@@ -113,6 +115,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       timeline,
       analyzedFileCount,
       llmUsage,
+      toolInvocations: this.toolTracker?.get() ?? {},
     });
   }
 
@@ -183,6 +186,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <div class="stat-value" id="totalAnalyses">0</div>
         <div class="stat-label">Analyses</div>
       </div>
+    </div>
+
+    <!-- Copilot tool take-up (our own LM tool invocations, this workspace) -->
+    <div class="section">
+      <div class="section-title">
+        <span>🔧 Copilot Tool Take-up</span>
+        <span class="excluded-count" id="toolTakeupTotal">0 calls</span>
+      </div>
+      <div id="toolTakeupChart" class="lang-chart"></div>
     </div>
 
     <!-- LLM Usage (from Claude Code transcripts) -->
@@ -489,6 +501,21 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           }).join('');
         }
 
+        // Copilot tool take-up
+        var takeup = message.toolInvocations || {};
+        var takeupNames = Object.keys(takeup);
+        var takeupTotal = takeupNames.reduce(function(s, k) { return s + takeup[k]; }, 0);
+        document.getElementById('toolTakeupTotal').textContent =
+          takeupTotal + (takeupTotal === 1 ? ' call' : ' calls');
+        document.getElementById('toolTakeupChart').innerHTML = takeupNames.length === 0
+          ? '<div class="empty-state">No LM tool calls in this workspace yet — if this stays 0 while you use Copilot agent mode, check the tools picker.</div>'
+          : takeupNames.sort(function(a, b) { return takeup[b] - takeup[a]; }).map(function(k) {
+              return '<div class="lang-row">'
+                + '<span class="lang-name">' + escapeHtml(k.replace('tokenslayer-', '')) + '</span>'
+                + '<span class="lang-value">' + takeup[k] + '</span>'
+                + '</div>';
+            }).join('');
+
         // LLM usage (Claude Code transcripts)
         var llm = message.llmUsage;
         var llmBody = document.getElementById('llmUsageBody');
@@ -497,7 +524,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           llmBody.style.display = '';
           llmEmpty.style.display = 'none';
           document.getElementById('llmSessionCount').textContent =
-            llm.sessionCount + (llm.sessionCount === 1 ? ' session' : ' sessions');
+            llm.sessionCount + (llm.sessionCount === 1 ? ' session' : ' sessions')
+            + (llm.requests ? ' \u00b7 ' + llm.requests + ' requests' : '');
           document.getElementById('llmInput').textContent = compactNum(llm.inputTokens);
           document.getElementById('llmOutput').textContent = compactNum(llm.outputTokens);
           document.getElementById('llmCacheRead').textContent = compactNum(llm.cacheReadTokens);

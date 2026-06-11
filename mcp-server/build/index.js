@@ -10,12 +10,18 @@ import * as path from 'path';
 /**
  * TokenSlayer Standalone MCP Server
  */
+// Default output budgets per tool (tokens). Overridable via maxTokens; 0 = unlimited.
+const DEFAULT_BUDGETS = {
+    analyze_files: 4000,
+    analyze_workspace: 6000,
+    analyze_dependency_chain: 4000,
+};
 class TokenSlayerServer {
     server;
     constructor() {
         this.server = new Server({
             name: "tokenslayer-mcp-server",
-            version: "3.0.0",
+            version: "1.0.0",
         }, {
             capabilities: {
                 tools: {},
@@ -53,7 +59,7 @@ class TokenSlayerServer {
                             },
                             maxTokens: {
                                 type: "number",
-                                description: "Optional. Token budget — progressively prune skeletons to fit within this limit."
+                                description: "Token budget (default 4000). Skeletons are progressively pruned to fit; pruned output ends with a note on how to drill deeper. Pass 0 for unlimited (not recommended for large files)."
                             },
                             format: {
                                 type: "string",
@@ -89,7 +95,7 @@ class TokenSlayerServer {
                             },
                             maxTokens: {
                                 type: "number",
-                                description: "Optional. Total token budget for the entire workspace output."
+                                description: "Total token budget for the workspace output (default 6000). Pass 0 for unlimited (not recommended)."
                             },
                             format: {
                                 type: "string",
@@ -129,7 +135,7 @@ class TokenSlayerServer {
                             },
                             maxTokens: {
                                 type: "number",
-                                description: "Optional. Token budget for the entire merged output."
+                                description: "Token budget for the merged output (default 4000). Pass 0 for unlimited (not recommended)."
                             },
                             format: {
                                 type: "string",
@@ -210,6 +216,11 @@ class TokenSlayerServer {
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const args = request.params.arguments ?? {};
+            // Default budgets: an unbudgeted skeleton of a huge file/workspace can cost
+            // more than the targeted read it replaces (benchmarked: a 17k-line file's
+            // full skeleton lost to grep by ~75%). Agents rarely pass maxTokens
+            // unprompted, so the cap must be the default; 0 opts out.
+            const budgetFor = (tool) => args.maxTokens ?? DEFAULT_BUDGETS[tool];
             if (request.params.name === "analyze_files") {
                 const filePaths = args.filePaths;
                 if (!Array.isArray(filePaths)) {
@@ -217,7 +228,7 @@ class TokenSlayerServer {
                 }
                 const symbol = args.symbol;
                 const query = args.query;
-                const maxTokens = args.maxTokens;
+                const maxTokens = budgetFor("analyze_files");
                 const format = args.format || 'text';
                 const expandable = args.expandable;
                 const targetModel = args.targetModel;
@@ -264,7 +275,7 @@ class TokenSlayerServer {
                     throw new Error("directoryPath is required");
                 }
                 const query = args.query;
-                const maxTokens = args.maxTokens;
+                const maxTokens = budgetFor("analyze_workspace");
                 const format = args.format || 'text';
                 const maxFiles = args.maxFiles || 100;
                 const targetModel = args.targetModel;
@@ -303,7 +314,7 @@ class TokenSlayerServer {
                     throw new Error("seedFile is required");
                 const depth = Math.min(args.depth || 2, 5);
                 const query = args.query;
-                const maxTokens = args.maxTokens;
+                const maxTokens = budgetFor("analyze_dependency_chain");
                 const format = args.format || 'text';
                 const expandable = args.expandable;
                 const targetModel = args.targetModel;
@@ -429,7 +440,13 @@ class TokenSlayerServer {
         }
         let contents = results.map(r => r.error ? `[Error] ${r.filePath}: ${r.error}` : r.skeleton).join('\n\n---\n\n');
         if (maxTokens) {
-            contents = pruneToFit(contents, maxTokens, targetModel);
+            const before = tokenize(contents, targetModel);
+            if (before > maxTokens) {
+                contents = pruneToFit(contents, maxTokens, targetModel);
+                contents += `\n\n[Output pruned to ~${maxTokens} tokens (full skeleton was ${before}). ` +
+                    `To go deeper: pass symbol/query to target what you need, expand_node for a tagged block, ` +
+                    `or maxTokens to raise the budget (0 = unlimited).]`;
+            }
         }
         const text = `📊 Session Stats: Saved ${totalSaved}% tokens (${totalOriginal} -> ${totalCompacted})\n\n${contents}`;
         return {

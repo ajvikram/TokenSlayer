@@ -5,6 +5,35 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-06-11
+
+### Changed
+
+- **Version 1.0.0** — TokenSlayer is production-ready. Extension and MCP server
+  both unified at v1.0.0. All architectural features (BPE layout optimization,
+  dependency chain analysis, structural patching, secrets detection, usage
+  tracking, tool invocation tracking) are stable and tested.
+
+## [0.7.0] — 2026-06-12
+
+### Added
+
+- **Default token budgets on all MCP analyze tools** (`analyze_files` 4000,
+  `analyze_workspace` 6000, `analyze_dependency_chain` 4000; pass `maxTokens: 0`
+  to opt out). SpendBench measured that an unbudgeted skeleton of a huge file
+  can cost more than the targeted read it replaces — agents rarely pass
+  `maxTokens` unprompted, so the cap is now the default. When output is pruned,
+  it ends with a note telling the model how to drill deeper (`symbol`/`query`
+  targeting, `expand_node`, or a larger budget).
+- **Copilot tool take-up telemetry.** The extension now counts its own LM-tool
+  invocations per workspace (stored locally in workspace state, nothing leaves
+  the machine) and shows them in the dashboard — answering "does Copilot
+  actually call our tools?" If take-up stays at 0 while using agent mode, the
+  tools picker / descriptions are the problem, not skeleton quality.
+- **API request counts in the LLM usage panel.** The Claude Code transcript
+  tracker now also counts requests (assistant messages with usage), shown
+  alongside sessions.
+
 ## [0.6.0] — 2026-06-11
 
 ### Changed

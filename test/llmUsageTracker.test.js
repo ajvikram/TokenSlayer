@@ -60,10 +60,12 @@ describe('parseTranscriptText', () => {
       outputTokens: 22,
       cacheReadTokens: 33,
       cacheCreationTokens: 44,
+      requests: 2,
     });
     const haiku = perModel.get('claude-haiku-4-5-20251001');
     assert.equal(haiku.inputTokens, 100);
     assert.equal(haiku.cacheReadTokens, 0);
+    assert.equal(haiku.requests, 1);
     assert.equal(lastActivity, Date.parse('2026-06-09T11:00:00.000Z'));
   });
 });
