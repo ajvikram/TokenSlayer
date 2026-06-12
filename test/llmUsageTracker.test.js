@@ -161,6 +161,9 @@ describe('LlmUsageTracker.getUsage', () => {
     assert.equal(usage.byMonth[0].month, monthKey(Date.parse('2026-06-09T10:00:00.000Z')));
     assert.equal(usage.byMonth[0].totalTokens, 50);
     assert.equal(usage.byMonth[0].requests, 2);
+    assert.equal(usage.byMonth[0].models.length, 1);
+    assert.equal(usage.byMonth[0].models[0].model, 'claude-fable-5');
+    assert.equal(usage.byMonth[0].models[0].requests, 2);
     assert.equal(usage.byMonth[1].month, monthKey(Date.parse('2026-05-15T10:00:00.000Z')));
     assert.equal(usage.byMonth[1].totalTokens, 20);
     assert.equal(usage.byMonth[1].requests, 1);
@@ -181,6 +184,7 @@ describe('LlmUsageTracker.getUsage', () => {
     assert.equal(usage.byMonth.length, 1);
     assert.equal(usage.byMonth[0].totalTokens, 40);
     assert.equal(usage.byMonth[0].requests, 2);
+    assert.equal(usage.byMonth[0].models.length, 2);
   });
 });
 

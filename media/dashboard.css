@@ -25,6 +25,44 @@ body {
   gap: 16px;
 }
 
+/* ─── Tab Bar ─────────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent);
+}
+
+.tab-bar .tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab-bar .tab.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tab-panel.active {
+  display: flex;
+}
+
 /* ─── Hero Section ───────────────────────────────────── */
 
 .hero {
@@ -765,4 +803,64 @@ body {
 .btn-small {
   font-size: 11px;
   padding: 4px 10px;
+}
+
+.monthly-note {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  margin: -8px 0 8px;
+  line-height: 1.4;
+}
+
+.month-card-sub {
+  font-size: 9px;
+  color: var(--vscode-descriptionForeground);
+  margin-top: 2px;
+}
+
+.monthly-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--vscode-foreground) 10%, transparent);
+}
+
+.monthly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.monthly-table th,
+.monthly-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.monthly-table th.num,
+.monthly-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.monthly-table th {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+}
+
+.monthly-table tr.month-row-current {
+  background: color-mix(in srgb, var(--vscode-button-background) 10%, transparent);
+}
+
+.monthly-table .models-cell {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
 }

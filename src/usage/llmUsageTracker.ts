@@ -26,10 +26,20 @@ export interface ModelUsage extends LlmUsageTotals {
   totalTokens: number;
 }
 
+export interface MonthlyModelUsage {
+  model: string;
+  totalTokens: number;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface MonthlyUsage extends LlmUsageTotals {
   /** Calendar month in `YYYY-MM` format (local time). */
   month: string;
   totalTokens: number;
+  /** Models used this month, sorted by token volume. */
+  models: MonthlyModelUsage[];
 }
 
 export interface LlmUsage extends LlmUsageTotals {
@@ -50,6 +60,7 @@ interface FileCacheEntry {
   mtimeMs: number;
   perModel: Map<string, LlmUsageTotals>;
   perMonth: Map<string, LlmUsageTotals>;
+  perMonthModel: Map<string, Map<string, LlmUsageTotals>>;
   lastActivity: number | null;
 }
 
@@ -95,10 +106,12 @@ function addUsage(target: LlmUsageTotals, usage: any): void {
 export function parseTranscriptText(text: string): {
   perModel: Map<string, LlmUsageTotals>;
   perMonth: Map<string, LlmUsageTotals>;
+  perMonthModel: Map<string, Map<string, LlmUsageTotals>>;
   lastActivity: number | null;
 } {
   const perModel = new Map<string, LlmUsageTotals>();
   const perMonth = new Map<string, LlmUsageTotals>();
+  const perMonthModel = new Map<string, Map<string, LlmUsageTotals>>();
   let lastActivity: number | null = null;
 
   for (const line of text.split('\n')) {
@@ -130,11 +143,17 @@ export function parseTranscriptText(text: string): {
         const monthTotals = perMonth.get(mk) ?? emptyTotals();
         addUsage(monthTotals, usage);
         perMonth.set(mk, monthTotals);
+
+        const monthModels = perMonthModel.get(mk) ?? new Map<string, LlmUsageTotals>();
+        const modelTotals = monthModels.get(model) ?? emptyTotals();
+        addUsage(modelTotals, usage);
+        monthModels.set(model, modelTotals);
+        perMonthModel.set(mk, monthModels);
       }
     }
   }
 
-  return { perModel, perMonth, lastActivity };
+  return { perModel, perMonth, perMonthModel, lastActivity };
 }
 
 export class LlmUsageTracker {
@@ -149,6 +168,7 @@ export class LlmUsageTracker {
     const dir = claudeProjectDir(workspaceRoot, claudeHome);
     const merged = new Map<string, LlmUsageTotals>();
     const mergedMonths = new Map<string, LlmUsageTotals>();
+    const mergedMonthModels = new Map<string, Map<string, LlmUsageTotals>>();
     let lastActivity: number | null = null;
     let sessionCount = 0;
 
@@ -190,6 +210,7 @@ export class LlmUsageTracker {
           mtimeMs: stat.mtimeMs,
           perModel: parsed.perModel,
           perMonth: parsed.perMonth,
+          perMonthModel: parsed.perMonthModel,
           lastActivity: parsed.lastActivity,
         };
         this.fileCache.set(filePath, entry);
@@ -209,6 +230,15 @@ export class LlmUsageTracker {
         mergeTotals(acc, totals);
         mergedMonths.set(month, acc);
       }
+      for (const [month, models] of entry.perMonthModel ?? new Map()) {
+        const accModels = mergedMonthModels.get(month) ?? new Map<string, LlmUsageTotals>();
+        for (const [model, totals] of models) {
+          const acc = accModels.get(model) ?? emptyTotals();
+          mergeTotals(acc, totals);
+          accModels.set(model, acc);
+        }
+        mergedMonthModels.set(month, accModels);
+      }
     }
 
     const sum = emptyTotals();
@@ -226,11 +256,24 @@ export class LlmUsageTracker {
 
     const byMonth: MonthlyUsage[] = [];
     for (const [month, totals] of mergedMonths) {
+      const models: MonthlyModelUsage[] = [];
+      const monthModels = mergedMonthModels.get(month);
+      if (monthModels) {
+        for (const [model, mt] of monthModels) {
+          models.push({
+            model,
+            ...mt,
+            totalTokens: mt.inputTokens + mt.outputTokens + mt.cacheReadTokens + mt.cacheCreationTokens,
+          });
+        }
+        models.sort((a, b) => b.totalTokens - a.totalTokens);
+      }
       byMonth.push({
         month,
         ...totals,
         totalTokens:
           totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheCreationTokens,
+        models,
       });
     }
     // Newest month first.
