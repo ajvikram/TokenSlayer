@@ -3,6 +3,7 @@ import { CacheManager } from './cache/cacheManager';
 import { StructuralSummaryTool } from './tools/structuralSummaryTool';
 import { PatchTool } from './tools/patchTool';
 import { ExpandNodeTool } from './tools/expandNodeTool';
+import { CallGraphTool } from './tools/callGraphTool';
 import { DashboardProvider } from './views/dashboardProvider';
 import { SkeletonPreviewProvider } from './views/skeletonPreviewProvider';
 import { TokenSlayerCodeLensProvider } from './views/codeLensProvider';
@@ -64,6 +65,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       withTakeup(toolTracker, 'tokenslayer-expand-node', expandNodeTool))
   );
   logger.info('Registered LM tool: tokenslayer-expand-node');
+
+  const callGraphTool = new CallGraphTool();
+  context.subscriptions.push(
+    vscode.lm.registerTool('tokenslayer-call-graph',
+      withTakeup(toolTracker, 'tokenslayer-call-graph', callGraphTool))
+  );
+  logger.info('Registered LM tool: tokenslayer-call-graph');
 
   // ─── 2b. Start Local Server (API) ─────────────────────────────────────────
   localServer = new LocalServer(cacheManager);

@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
-import { LlmUsageTracker } from '../usage/llmUsageTracker';
+import { LlmUsageTracker, monthKey } from '../usage/llmUsageTracker';
 import { ToolInvocationTracker } from '../usage/toolInvocationTracker';
+import { projectMonthEnd } from '../usage/forecast';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -107,6 +108,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       }
     }
 
+    const monthlyBudget = vscode.workspace
+      .getConfiguration('tokenslayer')
+      .get<number>('monthlyRequestBudget', 0);
+
     this.view.webview.postMessage({
       type: 'update',
       savings,
@@ -122,8 +127,28 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       toolInvocations: this.toolTracker?.get() ?? {},
       toolInvocationsByMonth: this.toolTracker?.getByMonth() ?? {},
       compactionByMonth: this.cacheManager.getCompactionByMonth(),
-      monthlyRequestBudget: vscode.workspace.getConfiguration('tokenslayer').get<number>('monthlyRequestBudget', 0),
+      monthlyRequestBudget: monthlyBudget,
+      forecast: this.computeForecast(llmUsage, monthlyBudget),
     });
+  }
+
+  /**
+   * Linear month-end projection of combined requests (LLM + tool calls) for the
+   * current calendar month. Kept in TS (not the webview) so the burn-rate math
+   * is unit-tested. Returns null when there's no current-month usage to project.
+   */
+  private computeForecast(
+    llmUsage: ReturnType<LlmUsageTracker['getUsage']> | null,
+    monthlyBudget: number
+  ): ReturnType<typeof projectMonthEnd> | null {
+    const nowKey = monthKey(Date.now());
+    const llmRequests =
+      llmUsage?.byMonth?.find((m) => m.month === nowKey)?.requests ?? 0;
+    const toolCounts = this.toolTracker?.getByMonth()?.[nowKey] ?? {};
+    const toolCalls = Object.values(toolCounts).reduce((s, n) => s + n, 0);
+    const used = llmRequests + toolCalls;
+    if (used === 0) { return null; }
+    return projectMonthEnd(used, new Date(), monthlyBudget);
   }
 
   private exportMonthlyCsv(): void {
@@ -451,6 +476,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <div class="monthly-note">Subscriptions roll monthly — LLM tokens, requests, models, tool calls, and compaction savings.</div>
         <div class="stats-grid" id="monthlySummaryCards"></div>
         <div id="monthlyBudgetBar" class="month-budget" style="display:none;"></div>
+        <div id="monthlyForecast" class="month-forecast" style="display:none;"></div>
         <div class="monthly-table-wrap" id="monthlyTableWrap" style="display:none;">
           <table class="monthly-table">
             <thead>
@@ -718,6 +744,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           message.compactionByMonth || {},
           message.monthlyRequestBudget || 0
         );
+        renderForecast(message.forecast);
 
         // Timeline sparkline
         drawTimeline(message.timeline);
@@ -952,6 +979,34 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           + '<td class="num month-mom">' + (momParts.length ? momParts.join('<br>') : '—') + '</td>'
           + '</tr>';
       }).join('');
+    }
+
+    function renderForecast(f) {
+      var el = document.getElementById('monthlyForecast');
+      if (!el) { return; }
+      if (!f || !f.projected) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
+      var rate = f.dailyRate >= 10 ? Math.round(f.dailyRate) : Math.round(f.dailyRate * 10) / 10;
+      var lead = f.reliable ? '📈 On pace for ' : '📈 Early estimate: ~';
+      var parts = ['<span class="forecast-main">' + lead + '<strong>' + compactNum(f.projected)
+        + '</strong> requests by month-end</span>'];
+      parts.push('<span class="forecast-sub">' + rate + '/day · ' + Math.round(f.daysRemaining) + ' days left</span>');
+      if (f.hitBudgetDay) {
+        parts.push('<span class="forecast-warn mom-up">⚠ on track to hit budget around the '
+          + ordinal(f.hitBudgetDay) + '</span>');
+      } else if (f.budget && !f.projectedOverBudget) {
+        parts.push('<span class="forecast-ok">within ' + compactNum(f.budget) + ' budget</span>');
+      }
+      el.innerHTML = parts.join(' · ');
+    }
+
+    function ordinal(n) {
+      var s = ['th', 'st', 'nd', 'rd'];
+      var v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
     }
 
     // Tab switching

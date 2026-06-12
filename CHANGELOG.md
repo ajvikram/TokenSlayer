@@ -5,6 +5,31 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-06-12
+
+### Added
+
+- **New `tokenslayer-call-graph` Language Model Tool.** Deterministic, zero-LLM
+  answers to relationship questions, backed by the language server's call
+  hierarchy (not a text search): `direction: "callers"` (what calls X),
+  `"callees"` (what X calls), and `"impact"` (transitive callers — what could
+  break if you change X, traced up to `depth`). Resolves overloads, methods, and
+  re-exports correctly where grep can't, and returns a compact list of call
+  sites that fits any context window. The Copilot wire-up instructions now steer
+  the model to it for "what calls X / what breaks if I change X" questions.
+- **Month-end usage forecast** on the Monthly tab. Linear burn-rate projection
+  of combined requests (LLM + tool calls) with a budget-crossing estimate
+  ("on track to hit budget around the 23rd"). Math is unit-tested; early-month
+  estimates are flagged until there's enough signal.
+
+### Changed
+
+- **Extension is now bundled with esbuild** — the published VSIX drops from
+  ~26 MB / 3,261 files to **~2.4 MB / 16 files**. The old size was gpt-tokenizer's
+  full encoding data; bundling tree-shakes it to only the encoding the extension
+  uses (token counts verified identical post-bundle). Faster activation, no
+  behavior change.
+
 ## [1.2.0] — 2026-06-11
 
 ### Added

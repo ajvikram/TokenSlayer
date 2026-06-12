@@ -1,8 +1,8 @@
 {
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
-  "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "1.2.0",
+  "description": "Semantic Structural Cache \u2014 Slash LLM token usage by 40-95% with AST-driven code skeletons",
+  "version": "1.3.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -28,7 +28,7 @@
   "activationEvents": [
     "onStartupFinished"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -128,8 +128,8 @@
           "architecture",
           "navigation"
         ],
-        "modelDescription": "Get a compact AST skeleton of source code (class hierarchies, function signatures, exports, type relationships). Call this BEFORE read_file for: 'how is X structured', 'where is Y defined', 'show me the class hierarchy', 'what does the module export', 'map this directory', 'workspace overview'. Returns 5-10% of the token cost of reading raw files. Skip this tool when: you already have the exact file + line range, the file is under ~20 lines, the target is a JSON/config/markdown file (no code structure to compact — read it directly), or the user explicitly asked for raw source. For implementation edits: call this first to locate the symbol, then read the specific line range you need to modify — do not read entire files cold.",
-        "userDescription": "Analyzes source code and returns a compact structural skeleton with class hierarchies, function signatures, and type relationships — saving 40-95% of tokens.",
+        "modelDescription": "Get a compact AST skeleton of source code (class hierarchies, function signatures, exports, type relationships). Call this BEFORE read_file for: 'how is X structured', 'where is Y defined', 'show me the class hierarchy', 'what does the module export', 'map this directory', 'workspace overview'. Returns 5-10% of the token cost of reading raw files. Skip this tool when: you already have the exact file + line range, the file is under ~20 lines, the target is a JSON/config/markdown file (no code structure to compact \u2014 read it directly), or the user explicitly asked for raw source. For implementation edits: call this first to locate the symbol, then read the specific line range you need to modify \u2014 do not read entire files cold.",
+        "userDescription": "Analyzes source code and returns a compact structural skeleton with class hierarchies, function signatures, and type relationships \u2014 saving 40-95% of tokens.",
         "icon": "$(symbol-structure)",
         "inputSchema": {
           "type": "object",
@@ -247,6 +247,49 @@
             "nodeId"
           ]
         }
+      },
+      {
+        "name": "tokenslayer-call-graph",
+        "displayName": "Call Graph",
+        "toolReferenceName": "tokenslayer-call-graph",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "code-structure",
+          "navigation",
+          "refactoring"
+        ],
+        "modelDescription": "Answer call-graph questions about a symbol deterministically, using the language server's call hierarchy (NOT a text search). Use this for: 'what calls X', 'who uses X', 'where is X called from' (direction='callers'); 'what does X call' (direction='callees'); and 'what breaks if I change X' / 'what is the blast radius of X' (direction='impact', which traces transitive callers up to `depth`). This is far more reliable than grepping for the name \u2014 it resolves overloads, methods, and re-exports correctly, and returns a compact list of call sites with file:line. Prefer this over reading files when the question is about who calls or is affected by a function. Requires a language server for the file's language to be active.",
+        "userDescription": "Finds callers, callees, and change-impact of a symbol using the language server's call hierarchy.",
+        "icon": "$(type-hierarchy)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Name of the function/method/symbol to analyze."
+            },
+            "filePath": {
+              "type": "string",
+              "description": "Optional. Absolute or workspace-relative path to disambiguate when the same name exists in multiple files."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "callers",
+                "callees",
+                "impact"
+              ],
+              "description": "'callers' (who calls it, default), 'callees' (what it calls), or 'impact' (transitive callers \u2014 what could break if you change it)."
+            },
+            "depth": {
+              "type": "number",
+              "description": "For direction='impact': how many levels of transitive callers to trace (default 2, max 5)."
+            }
+          },
+          "required": [
+            "symbol"
+          ]
+        }
       }
     ],
     "configuration": {
@@ -313,13 +356,15 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run check-types && node esbuild.js --production",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src",
     "test": "npm run test:unit",
     "test:unit": "npm run compile && node --require ./test/_setup.js --test test/*.test.js",
-    "test:e2e": "node ./out/test/runTest.js"
+    "test:e2e": "node ./out/test/runTest.js",
+    "check-types": "tsc --noEmit -p ./",
+    "bundle": "node esbuild.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -328,11 +373,10 @@
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
     "@vscode/vsce": "^2.21.1",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
+    "gpt-tokenizer": "^3.4.0",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.58.2"
-  },
-  "dependencies": {
-    "gpt-tokenizer": "^3.4.0"
   }
 }

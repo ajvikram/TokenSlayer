@@ -22,9 +22,12 @@ When you need to understand code in this repository, follow these rules:
 - "Show me the class hierarchy in \`src/auth/\`"
 - "What modules import \`tokenEstimator\`?"
 
+**For "what calls X" / "what breaks if I change X" questions, use \`#tokenslayer-call-graph\`** (not a text search) — it uses the language server's call hierarchy and returns exact call sites. \`direction: "impact"\` traces the blast radius before a refactor.
+
 **Skip the tool only when:**
 - You already have the exact file + line range from a previous turn.
 - The file is under ~20 lines (skeleton overhead exceeds the savings).
+- The target is a JSON/config/markdown file (no code structure to compact — read it directly).
 - The user explicitly asked for the raw file.
 ${INSTRUCTIONS_END}`;
 
