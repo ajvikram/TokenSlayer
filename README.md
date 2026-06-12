@@ -37,13 +37,14 @@ With TokenSlayer:     8-line structural skeleton →    200 tokens consumed (96%
 | **Domain Compaction** | Language-specific compactors strip bodies, keep signatures | ~5ms (pure string ops) |
 | **Semantic Caching** | Content-hash LRU cache with file-watcher invalidation | Instant on repeat |
 
-#### 🔧 Copilot Integration (3 LM Tools)
+#### 🔧 Copilot Integration (4 LM Tools)
 
-Three [Language Model Tools](https://code.visualstudio.com/api/extension-guides/language-model-tool) that Copilot can call autonomously:
+Four [Language Model Tools](https://code.visualstudio.com/api/extension-guides/language-model-tool) that Copilot can call autonomously:
 
 | Tool | What It Does |
 |---|---|
 | `#tokenslayer-structural-summary` | Returns compact AST skeleton with `/* NODE:id */` markers. Supports `scope: "dependency-chain"` and `targetModel` for BPE optimization. |
+| `#tokenslayer-call-graph` | Deterministic, zero-LLM call-graph queries via the language server's call hierarchy: `callers` (what calls X), `callees` (what X calls), `impact` (transitive callers — what breaks if you change X). Resolves overloads and methods correctly where a text search can't. |
 | `#tokenslayer-apply-patch` | Applies structural patches by node ID — `replace`, `insert_after`, `delete`. Returns a unified diff. |
 | `#tokenslayer-expand-node` | Expands a `NODE:<id>` marker back to that block's full source — drill into one function without re-reading the file. |
 
@@ -107,6 +108,8 @@ A real-time analytics dashboard with:
 - **📈 Stats Grid** — Reduction %, files analyzed, cache hit rate, cached entries, tokens processed, avg saved/file
 - **💰 Estimated Cost Saved** — Real-time cost estimates for GPT-4o and Claude Sonnet based on actual token savings
 - **🤖 LLM Tokens Used** — Real token consumption for the workspace (input/output/cache, per-model breakdown), aggregated from Claude Code session transcripts
+- **📅 Monthly Tab + Forecast** — Per-calendar-month requests, tokens, models, tool calls, and compaction savings with month-over-month deltas, plus a burn-rate forecast projecting month-end usage against your request budget ("on track to hit budget around the 23rd")
+- **🔧 Copilot Tool Take-up** — Per-workspace count of how often Copilot actually invokes the TokenSlayer LM tools, so you can see whether they're being used
 - **🔵 Workspace Coverage Ring** — SVG circular progress showing analyzed vs total files
 - **🍩 Donut Chart** — Animated circular chart showing compaction ratio
 - **📊 Language Breakdown** — Horizontal bar chart with language icons (15 languages supported)
@@ -540,11 +543,17 @@ cd TokenSlayer
 # Install dependencies
 npm install
 
-# Compile
+# Type-check + compile to out/ (used by the test suite)
 npm run compile
 
 # Watch mode (auto-recompile on changes)
 npm run watch
+
+# Bundle the extension with esbuild (single-file dist/extension.js, what ships in the VSIX)
+npm run bundle
+
+# Run the unit tests
+npm test
 
 # Package as VSIX
 npx @vscode/vsce package --no-dependencies --allow-missing-repository
@@ -579,11 +588,19 @@ TokenSlayer/
 │   ├── copilot/
 │   │   ├── wireUp.ts             # Wire Up Copilot logic
 │   │   └── wireUpAll.ts          # Wire Up for Cursor, Cline, Continue, Windsurf, Claude Code
+│   ├── graph/
+│   │   └── callGraph.ts          # Pure BFS call-graph traversal + formatting (unit-tested)
 │   ├── tools/
 │   │   ├── structuralSummaryTool.ts  # LM Tool for Copilot (+ dependency-chain scope)
+│   │   ├── callGraphTool.ts         # LM Tool: tokenslayer-call-graph (callers/callees/impact)
+│   │   ├── expandNodeTool.ts        # LM Tool: tokenslayer-expand-node
 │   │   └── patchTool.ts             # LM Tool: tokenslayer-apply-patch
+│   ├── usage/
+│   │   ├── llmUsageTracker.ts    # Per-workspace LLM token/request usage from transcripts
+│   │   ├── toolInvocationTracker.ts # Per-workspace LM-tool take-up (all-time + monthly)
+│   │   └── forecast.ts           # Month-end burn-rate projection (unit-tested)
 │   ├── views/
-│   │   ├── dashboardProvider.ts  # Sidebar webview dashboard
+│   │   ├── dashboardProvider.ts  # Sidebar webview dashboard (Overview + Monthly tabs)
 │   │   ├── skeletonPreviewProvider.ts
 │   │   ├── codeLensProvider.ts   # Inline ⚡ indicators
 │   │   └── fileDecorationProvider.ts # Explorer badges

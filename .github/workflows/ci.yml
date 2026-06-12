@@ -57,10 +57,14 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
+      - name: Bundle (esbuild)
+        run: npm run bundle -- --production
+
       - name: Verify output
         run: |
-          test -f out/extension.js || (echo "❌ extension.js not found" && exit 1)
-          echo "✅ Build output verified"
+          test -f out/extension.js || (echo "❌ tsc output not found" && exit 1)
+          test -f dist/extension.js || (echo "❌ esbuild bundle not found" && exit 1)
+          echo "✅ Build output verified (tsc + esbuild bundle)"
 
   # ─── Security ──────────────────────────────────────────────────────
   security:

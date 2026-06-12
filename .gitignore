@@ -40,3 +40,6 @@ npm-debug.log*
 
 # TokenSlayer stats (local data)
 .tokenslayer/
+
+# esbuild bundle output
+dist/

@@ -800,6 +800,24 @@ body {
   background: var(--vscode-charts-red, #f14c4c);
 }
 
+.month-forecast {
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+  color: var(--vscode-descriptionForeground);
+}
+
+.month-forecast .forecast-main {
+  color: var(--vscode-foreground);
+}
+
+.month-forecast .forecast-ok {
+  color: var(--vscode-charts-green, #89d185);
+}
+
 .btn-small {
   font-size: 11px;
   padding: 4px 10px;
