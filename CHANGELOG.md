@@ -5,6 +5,22 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-06-11
+
+### Added
+
+- **Monthly usage dashboards** on both the VS Code sidebar and MCP HTML dashboard.
+  LLM token usage (from Claude Code transcripts), tool invocation counts, and
+  token savings roll up by calendar month — aligned with how Copilot/LLM
+  subscriptions reset.
+- **Month-over-month delta indicators** (↑/↓ vs previous month) for tokens saved,
+  LLM usage, and MCP analyses.
+- **Configurable monthly budgets with progress bars.** Extension setting
+  `tokenslayer.monthlyRequestBudget` tracks combined LLM requests + tool calls;
+  MCP env `TOKENSLAYER_MONTHLY_ANALYSIS_BUDGET` tracks analyses per month.
+- **CSV export per month.** Extension dashboard save dialog and MCP endpoint
+  `/api/export/monthly.csv` for spreadsheet/billing reviews.
+
 ## [1.0.0] — 2026-06-11
 
 ### Changed

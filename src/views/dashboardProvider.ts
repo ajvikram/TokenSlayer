@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
 import { LlmUsageTracker } from '../usage/llmUsageTracker';
@@ -58,6 +59,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           case 'exportReport':
             vscode.commands.executeCommand('tokenslayer.exportReport');
             break;
+          case 'exportMonthlyCsv':
+            void this.exportMonthlyCsv();
+            break;
         }
       }
     );
@@ -116,7 +120,105 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       analyzedFileCount,
       llmUsage,
       toolInvocations: this.toolTracker?.get() ?? {},
+      toolInvocationsByMonth: this.toolTracker?.getByMonth() ?? {},
+      savingsByMonth: this.cacheManager.getSavingsByMonth(),
+      monthlyRequestBudget: vscode.workspace.getConfiguration('tokenslayer').get<number>('monthlyRequestBudget', 0),
     });
+  }
+
+  private exportMonthlyCsv(): void {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let llmUsage = null;
+    if (workspaceRoot) {
+      try {
+        llmUsage = this.llmUsageTracker.getUsage(workspaceRoot);
+      } catch (err) {
+        logger.warn('Failed to read LLM usage for CSV export', err);
+      }
+    }
+
+    const csv = this.buildMonthlyCsv(
+      llmUsage,
+      this.toolTracker?.getByMonth() ?? {},
+      this.cacheManager.getSavingsByMonth()
+    );
+
+    const defaultName = `tokenslayer-monthly-${new Date().toISOString().slice(0, 7)}.csv`;
+    void vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(defaultName),
+      filters: { CSV: ['csv'] },
+      saveLabel: 'Export Monthly CSV',
+    }).then(uri => {
+      if (!uri) return;
+      fs.writeFileSync(uri.fsPath, csv, 'utf-8');
+      void vscode.window.showInformationMessage(`TokenSlayer: Monthly CSV saved to ${uri.fsPath}`);
+    });
+  }
+
+  private buildMonthlyCsv(
+    llm: ReturnType<LlmUsageTracker['getUsage']> | null,
+    toolsByMonth: Record<string, Record<string, number>>,
+    savingsByMonth: Record<string, number>
+  ): string {
+    const months: Record<string, {
+      llmTokens?: number;
+      llmRequests?: number;
+      toolCalls?: number;
+      tokensSaved?: number;
+    }> = {};
+
+    if (llm?.byMonth) {
+      for (const m of llm.byMonth) {
+        months[m.month] = months[m.month] ?? {};
+        months[m.month].llmTokens = m.totalTokens;
+        months[m.month].llmRequests = m.requests;
+      }
+    }
+    for (const mk of Object.keys(toolsByMonth)) {
+      const calls = Object.values(toolsByMonth[mk]).reduce((s, n) => s + n, 0);
+      months[mk] = months[mk] ?? {};
+      months[mk].toolCalls = calls;
+    }
+    for (const mk of Object.keys(savingsByMonth)) {
+      months[mk] = months[mk] ?? {};
+      months[mk].tokensSaved = savingsByMonth[mk];
+    }
+
+    const keys = Object.keys(months).sort().reverse();
+    const header = [
+      'month',
+      'llm_tokens',
+      'llm_requests',
+      'tool_calls',
+      'combined_requests',
+      'tokens_saved',
+      'mom_llm_tokens_delta',
+      'mom_tokens_saved_delta',
+    ].join(',');
+
+    const rows = keys.map((k, i) => {
+      const m = months[k];
+      const prev = i + 1 < keys.length ? months[keys[i + 1]] : undefined;
+      const combined = (m.llmRequests ?? 0) + (m.toolCalls ?? 0);
+      const momLlm = prev && m.llmTokens != null && prev.llmTokens != null
+        ? m.llmTokens - prev.llmTokens
+        : '';
+      const momSaved = prev && m.tokensSaved != null && prev.tokensSaved != null
+        ? m.tokensSaved - prev.tokensSaved
+        : '';
+      return [
+        k,
+        m.llmTokens ?? '',
+        m.llmRequests ?? '',
+        m.toolCalls ?? '',
+        combined || '',
+        m.tokensSaved ?? '',
+        momLlm,
+        momSaved,
+      ].join(',');
+    });
+
+    return [header, ...rows].join('\n') + '\n';
   }
 
   /**
@@ -229,6 +331,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <div class="lang-chart" id="llmModelChart"></div>
       </div>
       <div class="empty-state-small" id="llmEmpty">No Claude Code activity recorded for this workspace yet</div>
+    </div>
+
+    <!-- Monthly Usage (subscriptions roll monthly) -->
+    <div class="section">
+      <div class="section-title">
+        <span>📅 Monthly Usage</span>
+        <span class="excluded-count" id="monthlyCurrentLabel"></span>
+      </div>
+      <div id="monthlyBudgetBar" class="month-budget" style="display:none;"></div>
+      <div id="monthlyUsageList"></div>
+      <div class="empty-state-small" id="monthlyEmpty">No monthly data yet — usage will roll up here per calendar month</div>
+      <button class="btn btn-export btn-small" id="exportMonthlyBtn" style="margin-top:8px;">📥 Export CSV</button>
     </div>
 
     <!-- Workspace Coverage Ring -->
@@ -554,6 +668,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           llmEmpty.style.display = '';
         }
 
+        // Monthly usage (LLM tokens + tool calls per calendar month)
+        renderMonthlyUsage(
+          llm,
+          message.toolInvocationsByMonth || {},
+          message.savingsByMonth || {},
+          message.monthlyRequestBudget || 0
+        );
+
         // Timeline sparkline
         drawTimeline(message.timeline);
 
@@ -645,6 +767,125 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       return n.toString();
     }
 
+    var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    function monthLabel(key) {
+      // key is 'YYYY-MM'
+      var parts = key.split('-');
+      var m = parseInt(parts[1], 10);
+      return MONTH_NAMES[m - 1] + ' ' + parts[0];
+    }
+
+    function currentMonthKey() {
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function formatMomDelta(current, previous) {
+      if (previous == null || previous === undefined) return '';
+      var delta = current - previous;
+      if (delta === 0) return '<span class="mom-flat">→ flat</span>';
+      var cls = delta > 0 ? 'mom-up' : 'mom-down';
+      var arrow = delta > 0 ? '↑' : '↓';
+      var abs = Math.abs(delta);
+      var label = compactNum(abs);
+      if (previous > 0) {
+        var pct = Math.round((delta / previous) * 100);
+        label += ' (' + (pct > 0 ? '+' : '') + pct + '%)';
+      }
+      return '<span class="' + cls + '">' + arrow + ' ' + label + '</span>';
+    }
+
+    // Merge LLM usage months and tool-call months into one newest-first list.
+    function renderMonthlyUsage(llm, toolsByMonth, savingsByMonth, monthlyBudget) {
+      var listEl = document.getElementById('monthlyUsageList');
+      var emptyEl = document.getElementById('monthlyEmpty');
+      var currentLabelEl = document.getElementById('monthlyCurrentLabel');
+      var budgetEl = document.getElementById('monthlyBudgetBar');
+
+      var months = {};
+      if (llm && llm.byMonth) {
+        llm.byMonth.forEach(function(m) {
+          months[m.month] = months[m.month] || {};
+          months[m.month].tokens = m.totalTokens;
+          months[m.month].requests = m.requests;
+        });
+      }
+      Object.keys(toolsByMonth).forEach(function(mk) {
+        var calls = Object.keys(toolsByMonth[mk]).reduce(function(s, k) { return s + toolsByMonth[mk][k]; }, 0);
+        months[mk] = months[mk] || {};
+        months[mk].toolCalls = calls;
+      });
+      Object.keys(savingsByMonth).forEach(function(mk) {
+        months[mk] = months[mk] || {};
+        months[mk].saved = savingsByMonth[mk];
+      });
+
+      var keys = Object.keys(months).sort().reverse().slice(0, 6);
+      if (keys.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = '';
+        currentLabelEl.textContent = '';
+        budgetEl.style.display = 'none';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      var nowKey = currentMonthKey();
+      var cur = months[nowKey];
+      var combinedReq = (cur && ((cur.requests || 0) + (cur.toolCalls || 0))) || 0;
+      currentLabelEl.textContent = combinedReq
+        ? (combinedReq + ' req this month')
+        : '';
+
+      if (monthlyBudget > 0) {
+        var used = combinedReq;
+        var pct = Math.min(100, Math.round((used / monthlyBudget) * 100));
+        var over = used > monthlyBudget;
+        budgetEl.style.display = '';
+        budgetEl.innerHTML = '<div class="month-budget-label">'
+          + used + ' / ' + monthlyBudget + ' requests'
+          + (over ? ' <span class="mom-up">over budget</span>' : '')
+          + '</div>'
+          + '<div class="lang-bar-bg"><div class="lang-bar-fill' + (over ? ' budget-over' : '') + '" style="width:' + pct + '%"></div></div>';
+      } else {
+        budgetEl.style.display = 'none';
+      }
+
+      var maxTokens = keys.reduce(function(mx, k) {
+        return Math.max(mx, months[k].tokens || months[k].saved || 0);
+      }, 1);
+
+      listEl.innerHTML = keys.map(function(k, idx) {
+        var m = months[k];
+        var prevKey = keys[idx + 1];
+        var prev = prevKey ? months[prevKey] : null;
+        var isCurrent = k === nowKey;
+        var barVal = m.tokens || m.saved || 0;
+        var barWidth = Math.max(4, Math.round((barVal / maxTokens) * 100));
+        var details = [];
+        if (m.requests) details.push(m.requests + ' req');
+        if (m.toolCalls) details.push(m.toolCalls + ' tool calls');
+        if (m.saved) details.push(compactNum(m.saved) + ' saved');
+        var momParts = [];
+        if (m.tokens != null && prev && prev.tokens != null) {
+          momParts.push(formatMomDelta(m.tokens, prev.tokens) + ' tok');
+        }
+        if (m.saved != null && prev && prev.saved != null) {
+          momParts.push(formatMomDelta(m.saved, prev.saved) + ' saved');
+        }
+        return '<div class="month-row' + (isCurrent ? ' month-current' : '') + '">'
+          + '<div class="month-header">'
+          + '<span class="month-name">' + monthLabel(k) + (isCurrent ? ' <span class="month-badge">current</span>' : '') + '</span>'
+          + '<span class="month-tokens">' + (m.tokens ? compactNum(m.tokens) + ' tok' : (m.saved ? compactNum(m.saved) + ' saved' : '—')) + '</span>'
+          + '</div>'
+          + '<div class="lang-bar-bg"><div class="lang-bar-fill" style="width:' + barWidth + '%"></div></div>'
+          + '<div class="month-details">' + details.join(' · ') + '</div>'
+          + (momParts.length ? '<div class="month-mom">' + momParts.join(' · ') + '</div>' : '')
+          + '</div>';
+      }).join('');
+    }
+
     function getTimeAgo(timestamp) {
       var seconds = Math.floor((Date.now() - timestamp) / 1000);
       if (seconds < 60) return 'just now';
@@ -668,6 +909,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     });
     document.getElementById('exportBtn').addEventListener('click', function() {
       vscode.postMessage({ type: 'exportReport' });
+    });
+    document.getElementById('exportMonthlyBtn').addEventListener('click', function() {
+      vscode.postMessage({ type: 'exportMonthlyCsv' });
     });
 
     // Request initial data

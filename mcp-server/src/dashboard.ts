@@ -1,5 +1,5 @@
 import * as http from 'http';
-import { readStats, aggregate, getStatsFilePath, type Aggregates } from './stats.js';
+import { readStats, aggregate, getStatsFilePath, formatMonthlyCsv, type Aggregates } from './stats.js';
 
 const DEFAULT_PORT = 4734;
 
@@ -20,6 +20,15 @@ export function startDashboard(port: number = DEFAULT_PORT): http.Server {
         'Content-Disposition': 'attachment; filename="tokenslayer-stats.json"',
       });
       res.end(JSON.stringify(payload, null, 2));
+      return;
+    }
+    if (req.url === '/api/export/monthly.csv') {
+      const agg = aggregate(readStats());
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="tokenslayer-monthly.csv"',
+      });
+      res.end(formatMonthlyCsv(agg));
       return;
     }
     if (req.url === '/favicon.ico') {
@@ -236,7 +245,8 @@ function renderHTML(): string {
     </div>
     <div class="header-actions">
       <span class="status"><span class="dot"></span>auto-refresh 5s</span>
-      <button class="btn" id="exportBtn" title="Download stats as JSON">📥 Export</button>
+      <button class="btn" id="exportBtn" title="Download stats as JSON">📥 Export JSON</button>
+      <button class="btn" id="exportCsvBtn" title="Download monthly breakdown as CSV">📊 Export CSV</button>
     </div>
   </div>
 
@@ -265,6 +275,20 @@ function renderHTML(): string {
     }
     function esc(s) {
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function fmtMonthLabel(key) {
+      var parts = key.split('-');
+      var idx = parseInt(parts[1], 10) - 1;
+      return (idx >= 0 && idx < 12) ? MONTH_NAMES[idx] + ' ' + parts[0] : key;
+    }
+    function formatMomDelta(delta, percent) {
+      if (delta == null) return '—';
+      if (delta === 0) return '→ flat';
+      var arrow = delta > 0 ? '↑' : '↓';
+      var abs = Math.abs(delta).toLocaleString('en-US');
+      if (percent != null) return arrow + ' ' + abs + ' (' + (percent > 0 ? '+' : '') + percent + '%)';
+      return arrow + ' ' + abs;
     }
 
     function drawSparkline(canvasId, timeline) {
@@ -365,6 +389,23 @@ function renderHTML(): string {
       html += '<div class="card"><div class="label">Unique Files</div><div class="value">' + fmtNum(a.uniqueFiles) + '</div><div class="meta">' + fmtNum(a.totalAnalyses) + ' total analyses</div></div>';
       html += '<div class="card"><div class="label">MCP Calls</div><div class="value">' + fmtNum(a.totalCalls) + '</div><div class="meta">last: ' + fmtRelTime(a.lastCall) + '</div></div>';
       html += '<div class="card"><div class="label">Reduction</div><div class="value highlight">' + a.reductionPercent + '%</div><div class="meta">avg token compaction</div></div>';
+
+      // This-month card (budgets roll monthly)
+      var nowKey = new Date().toISOString().slice(0, 7);
+      var curMonth = (a.byMonth || []).find(function(m) { return m.month === nowKey; });
+      if (curMonth) {
+        html += '<div class="card"><div class="label">This Month</div><div class="value highlight">' + fmtNum(curMonth.saved) + '</div>';
+        html += '<div class="meta">' + fmtNum(curMonth.analyses) + ' analyses · ' + fmtNum(curMonth.calls) + ' calls · ' + esc(curMonth.estimatedCost.label) + ' saved</div>';
+        if (a.monthlyAnalysisBudget > 0) {
+          var budgetPct = Math.min(100, Math.round((curMonth.analyses / a.monthlyAnalysisBudget) * 100));
+          var overBudget = curMonth.analyses > a.monthlyAnalysisBudget;
+          html += '<div class="meta" style="margin-top:6px;">Budget: ' + fmtNum(curMonth.analyses) + ' / ' + fmtNum(a.monthlyAnalysisBudget) + ' analyses'
+            + (overBudget ? ' <span style="color:var(--red);">over</span>' : '') + '</div>';
+          html += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden;">';
+          html += '<div style="height:100%;width:' + budgetPct + '%;background:' + (overBudget ? 'var(--red)' : 'var(--accent)') + ';border-radius:2px;"></div></div>';
+        }
+        html += '</div>';
+      }
       html += '</div>';
 
       // Sparkline
@@ -374,6 +415,32 @@ function renderHTML(): string {
         html += '<span class="sparkline-total">cumulative: ' + fmtNum(a.totalSaved) + ' tokens</span></div>';
         html += '<canvas id="sparkCanvas" width="800" height="80"></canvas>';
         html += '</div>';
+      }
+
+      // Monthly breakdown (newest first)
+      if (a.byMonth && a.byMonth.length > 0) {
+        var maxMonthSaved = Math.max.apply(null, a.byMonth.map(function(m) { return m.saved; })) || 1;
+        html += '<div class="section"><h2>📅 Monthly Breakdown</h2><table>';
+        html += '<thead><tr><th>Month</th><th class="num">Analyses</th><th class="num">Calls</th><th class="num">Files</th><th class="num">Tokens Saved</th><th class="num">Reduction</th><th class="num">Est. Cost Saved</th><th class="num">vs Prev</th><th></th></tr></thead><tbody>';
+        for (var mi = 0; mi < Math.min(a.byMonth.length, 12); mi++) {
+          var mo = a.byMonth[mi];
+          var isCur = mo.month === nowKey;
+          var mw = Math.max(2, Math.round((mo.saved / maxMonthSaved) * 140));
+          var momLabel = mo.momSavedDelta != null
+            ? formatMomDelta(mo.momSavedDelta, mo.momSavedPercent)
+            : '—';
+          html += '<tr' + (isCur ? ' style="background:color-mix(in srgb, var(--accent) 6%, transparent);"' : '') + '>';
+          html += '<td><strong>' + esc(fmtMonthLabel(mo.month)) + '</strong>' + (isCur ? ' <span style="font-size:10px;color:var(--accent);text-transform:uppercase;">current</span>' : '') + '</td>';
+          html += '<td class="num">' + fmtNum(mo.analyses) + '</td>';
+          html += '<td class="num">' + fmtNum(mo.calls) + '</td>';
+          html += '<td class="num">' + fmtNum(mo.uniqueFiles) + '</td>';
+          html += '<td class="num">' + fmtNum(mo.saved) + '</td>';
+          html += '<td class="num pct">' + mo.reductionPercent + '%</td>';
+          html += '<td class="num" style="color:var(--yellow);">' + esc(mo.estimatedCost.label) + '</td>';
+          html += '<td class="num" style="font-size:11px;color:var(--muted);">' + esc(momLabel) + '</td>';
+          html += '<td><span class="bar" style="width:' + mw + 'px;"></span></td></tr>';
+        }
+        html += '</tbody></table></div>';
       }
 
       // Language table
@@ -440,6 +507,9 @@ function renderHTML(): string {
 
     document.getElementById('exportBtn').addEventListener('click', function() {
       window.open('/api/export', '_blank');
+    });
+    document.getElementById('exportCsvBtn').addEventListener('click', function() {
+      window.open('/api/export/monthly.csv', '_blank');
     });
 
     render().catch(function(e) {

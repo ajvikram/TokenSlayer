@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache — Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -302,6 +302,12 @@
           "minimum": 1,
           "maximum": 5,
           "description": "Maximum import-follow depth for dependency chain analysis."
+        },
+        "tokenslayer.monthlyRequestBudget": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Monthly cap on combined LLM requests + TokenSlayer tool calls. Shows a progress bar on the dashboard when set (0 = disabled)."
         }
       }
     }

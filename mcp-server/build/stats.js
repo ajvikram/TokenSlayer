@@ -52,6 +52,35 @@ export function clearStats() {
 export function getStatsFilePath() {
     return STATS_FILE;
 }
+/** Optional cap on MCP analyses per calendar month (0 = disabled). */
+export function getMonthlyAnalysisBudget() {
+    const raw = process.env.TOKENSLAYER_MONTHLY_ANALYSIS_BUDGET;
+    if (!raw)
+        return 0;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function attachMonthOverMonthDeltas(byMonth) {
+    for (let i = 0; i < byMonth.length; i++) {
+        const prev = byMonth[i + 1];
+        if (!prev)
+            continue;
+        byMonth[i].momSavedDelta = byMonth[i].saved - prev.saved;
+        byMonth[i].momSavedPercent = prev.saved > 0
+            ? Math.round(((byMonth[i].saved - prev.saved) / prev.saved) * 100)
+            : null;
+        byMonth[i].momAnalysesDelta = byMonth[i].analyses - prev.analyses;
+    }
+}
+export function formatMomDelta(delta, percent) {
+    if (delta === 0)
+        return '→ flat';
+    const arrow = delta > 0 ? '↑' : '↓';
+    const abs = Math.abs(delta).toLocaleString('en-US');
+    if (percent != null)
+        return `${arrow} ${abs} (${percent > 0 ? '+' : ''}${percent}%)`;
+    return `${arrow} ${abs}`;
+}
 const COST_PER_MILLION_INPUT = {
     gpt4o: 2.50,
     claudeSonnet: 3.00,
@@ -64,10 +93,21 @@ function estimateCost(tokensSaved) {
     const label = best < 0.01 ? '<$0.01' : `~$${best.toFixed(2)}`;
     return { gpt4o, claudeSonnet, label };
 }
+/** Extract a UTC `YYYY-MM` month key from an ISO timestamp, or null. */
+export function monthKeyOf(isoTimestamp) {
+    // ISO timestamps start with YYYY-MM-DD; slice avoids a Date allocation.
+    if (/^\d{4}-\d{2}/.test(isoTimestamp))
+        return isoTimestamp.slice(0, 7);
+    const t = Date.parse(isoTimestamp);
+    if (Number.isNaN(t))
+        return null;
+    return new Date(t).toISOString().slice(0, 7);
+}
 export function aggregate(records) {
     const byLanguage = {};
     const fileMap = new Map();
     const callTimestamps = new Set();
+    const monthBuckets = new Map();
     let totalOriginal = 0;
     let totalCompacted = 0;
     // Group records by timestamp for timeline
@@ -86,6 +126,18 @@ export function aggregate(records) {
         lang.original += r.originalTokens;
         lang.compacted += r.compactedTokens;
         lang.saved += saved;
+        const mk = monthKeyOf(r.timestamp);
+        if (mk) {
+            const bucket = monthBuckets.get(mk) ?? {
+                analyses: 0, calls: new Set(), files: new Set(), original: 0, compacted: 0,
+            };
+            bucket.analyses += 1;
+            bucket.calls.add(r.timestamp);
+            bucket.files.add(r.filePath);
+            bucket.original += r.originalTokens;
+            bucket.compacted += r.compactedTokens;
+            monthBuckets.set(mk, bucket);
+        }
         const existing = fileMap.get(r.filePath);
         if (existing) {
             existing.saved = saved;
@@ -122,6 +174,24 @@ export function aggregate(records) {
     }
     const timelineSlice = timeline.slice(-50);
     const totalSaved = totalOriginal - totalCompacted;
+    // Newest month first.
+    const byMonth = Array.from(monthBuckets.entries())
+        .map(([month, b]) => {
+        const saved = b.original - b.compacted;
+        return {
+            month,
+            analyses: b.analyses,
+            calls: b.calls.size,
+            uniqueFiles: b.files.size,
+            original: b.original,
+            compacted: b.compacted,
+            saved,
+            reductionPercent: b.original > 0 ? Math.round((saved / b.original) * 100) : 0,
+            estimatedCost: estimateCost(saved),
+        };
+    })
+        .sort((a, b) => b.month.localeCompare(a.month));
+    attachMonthOverMonthDeltas(byMonth);
     return {
         totalCalls: callTimestamps.size,
         totalAnalyses: records.length,
@@ -136,10 +206,12 @@ export function aggregate(records) {
         estimatedCost: estimateCost(totalSaved),
         timeline: timelineSlice,
         byLanguage,
+        byMonth,
         topSavers,
         recentActivity,
         firstCall: sortedTimestamps[0] ?? null,
         lastCall: sortedTimestamps[sortedTimestamps.length - 1] ?? null,
+        monthlyAnalysisBudget: getMonthlyAnalysisBudget(),
     };
 }
 function shortPath(p, maxLen = 60) {
@@ -152,6 +224,12 @@ function shortPath(p, maxLen = 60) {
 }
 function fmtNum(n) {
     return n.toLocaleString('en-US');
+}
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtMonth(key) {
+    const [y, m] = key.split('-');
+    const idx = parseInt(m, 10) - 1;
+    return idx >= 0 && idx < 12 ? `${MONTH_NAMES[idx]} ${y}` : key;
 }
 function fmtRelTime(iso) {
     if (!iso)
@@ -191,6 +269,17 @@ export function formatMarkdown(agg) {
     lines.push(`| MCP Calls | ${fmtNum(agg.totalCalls)} |`);
     lines.push(`| First Call | ${fmtRelTime(agg.firstCall)} |`);
     lines.push(`| Last Call | ${fmtRelTime(agg.lastCall)} |`);
+    if (agg.byMonth.length > 0) {
+        lines.push('');
+        lines.push('## By Month');
+        lines.push('');
+        lines.push('| Month | Analyses | Calls | Tokens Saved | Reduction | Est. Cost Saved | vs Prev Month |');
+        lines.push('|---|---|---|---|---|---|---|');
+        for (const m of agg.byMonth.slice(0, 12)) {
+            const mom = m.momSavedDelta != null ? formatMomDelta(m.momSavedDelta, m.momSavedPercent) : '—';
+            lines.push(`| ${fmtMonth(m.month)} | ${fmtNum(m.analyses)} | ${fmtNum(m.calls)} | ${fmtNum(m.saved)} | ${m.reductionPercent}% | ${m.estimatedCost.label} | ${mom} |`);
+        }
+    }
     const langs = Object.entries(agg.byLanguage).sort((a, b) => b[1].saved - a[1].saved);
     if (langs.length > 0) {
         lines.push('');
@@ -245,6 +334,21 @@ export function formatTerminal(agg) {
     lines.push(`  ${dim('Unique Files')}      ${fmtNum(agg.uniqueFiles)}`);
     lines.push(`  ${dim('MCP Calls')}         ${fmtNum(agg.totalCalls)}`);
     lines.push(`  ${dim('Last Call')}         ${fmtRelTime(agg.lastCall)}`);
+    if (agg.byMonth.length > 0) {
+        lines.push('');
+        lines.push(cyan('  By Month'));
+        lines.push(cyan('  ' + '─'.repeat(56)));
+        for (const m of agg.byMonth.slice(0, 6)) {
+            const label = fmtMonth(m.month).padEnd(10);
+            const analyses = String(m.analyses).padStart(5);
+            const saved = fmtNum(m.saved).padStart(10);
+            const pct = (m.reductionPercent + '%').padStart(5);
+            const mom = m.momSavedDelta != null
+                ? formatMomDelta(m.momSavedDelta, m.momSavedPercent)
+                : '—';
+            lines.push(`  ${bold(label)} ${dim('analyses=')}${analyses}  ${dim('saved=')}${green(saved)}  ${yellow(pct)}  ${dim(m.estimatedCost.label)}  ${dim(mom)}`);
+        }
+    }
     const langs = Object.entries(agg.byLanguage).sort((a, b) => b[1].saved - a[1].saved);
     if (langs.length > 0) {
         lines.push('');
@@ -273,4 +377,41 @@ export function formatTerminal(agg) {
     lines.push(dim(`  Stats file: ${getStatsFilePath()}`));
     lines.push('');
     return lines.join('\n');
+}
+/** CSV export of monthly breakdown (for spreadsheets / billing reviews). */
+export function formatMonthlyCsv(agg) {
+    const header = [
+        'month',
+        'analyses',
+        'calls',
+        'unique_files',
+        'original_tokens',
+        'compacted_tokens',
+        'tokens_saved',
+        'reduction_percent',
+        'est_cost_gpt4o_usd',
+        'est_cost_claude_usd',
+        'mom_saved_delta',
+        'mom_saved_percent',
+        'mom_analyses_delta',
+    ].join(',');
+    if (agg.byMonth.length === 0) {
+        return header + '\n';
+    }
+    const rows = agg.byMonth.map(m => [
+        m.month,
+        m.analyses,
+        m.calls,
+        m.uniqueFiles,
+        m.original,
+        m.compacted,
+        m.saved,
+        m.reductionPercent,
+        m.estimatedCost.gpt4o.toFixed(2),
+        m.estimatedCost.claudeSonnet.toFixed(2),
+        m.momSavedDelta ?? '',
+        m.momSavedPercent ?? '',
+        m.momAnalysesDelta ?? '',
+    ].join(','));
+    return [header, ...rows].join('\n') + '\n';
 }

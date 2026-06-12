@@ -678,3 +678,91 @@ body {
   color: var(--vscode-errorForeground, #f44);
   border: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f44) 30%, transparent);
 }
+
+/* ─── Monthly Usage ─────────────────────────────────────────── */
+
+.month-row {
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+}
+
+.month-row.month-current {
+  background: color-mix(in srgb, var(--vscode-button-background) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vscode-button-background) 30%, transparent);
+}
+
+.month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.month-name {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.month-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  margin-left: 4px;
+}
+
+.month-tokens {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vscode-descriptionForeground);
+}
+
+.month-details {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  margin-top: 4px;
+}
+
+.month-mom {
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+.mom-up {
+  color: var(--vscode-charts-red, #f14c4c);
+}
+
+.mom-down {
+  color: var(--vscode-charts-green, #89d185);
+}
+
+.mom-flat {
+  color: var(--vscode-descriptionForeground);
+}
+
+.month-budget {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+}
+
+.month-budget-label {
+  font-size: 10px;
+  margin-bottom: 4px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.lang-bar-fill.budget-over {
+  background: var(--vscode-charts-red, #f14c4c);
+}
+
+.btn-small {
+  font-size: 11px;
+  padding: 4px 10px;
+}

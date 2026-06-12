@@ -26,10 +26,18 @@ export interface ModelUsage extends LlmUsageTotals {
   totalTokens: number;
 }
 
+export interface MonthlyUsage extends LlmUsageTotals {
+  /** Calendar month in `YYYY-MM` format (local time). */
+  month: string;
+  totalTokens: number;
+}
+
 export interface LlmUsage extends LlmUsageTotals {
   /** Sum of all four categories. */
   totalTokens: number;
   byModel: ModelUsage[];
+  /** Newest month first. Subscriptions roll monthly, so this is the budget view. */
+  byMonth: MonthlyUsage[];
   sessionCount: number;
   /** Epoch ms of the most recent usage record, or null. */
   lastActivity: number | null;
@@ -41,11 +49,20 @@ interface FileCacheEntry {
   size: number;
   mtimeMs: number;
   perModel: Map<string, LlmUsageTotals>;
+  perMonth: Map<string, LlmUsageTotals>;
   lastActivity: number | null;
 }
 
 function emptyTotals(): LlmUsageTotals {
   return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, requests: 0 };
+}
+
+function mergeTotals(target: LlmUsageTotals, src: LlmUsageTotals): void {
+  target.inputTokens += src.inputTokens;
+  target.outputTokens += src.outputTokens;
+  target.cacheReadTokens += src.cacheReadTokens;
+  target.cacheCreationTokens += src.cacheCreationTokens;
+  target.requests += src.requests;
 }
 
 /**
@@ -57,15 +74,31 @@ export function claudeProjectDir(workspaceRoot: string, claudeHome?: string): st
   return path.join(claudeHome ?? path.join(os.homedir(), '.claude'), 'projects', slug);
 }
 
+/** Format an epoch-ms timestamp as a local `YYYY-MM` month key. */
+export function monthKey(epochMs: number): string {
+  const d = new Date(epochMs);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function addUsage(target: LlmUsageTotals, usage: any): void {
+  target.inputTokens += usage.input_tokens ?? 0;
+  target.outputTokens += usage.output_tokens ?? 0;
+  target.cacheReadTokens += usage.cache_read_input_tokens ?? 0;
+  target.cacheCreationTokens += usage.cache_creation_input_tokens ?? 0;
+  target.requests += 1;
+}
+
 /**
- * Parse one transcript's JSONL text into per-model usage totals.
+ * Parse one transcript's JSONL text into per-model and per-month usage totals.
  * Exposed for tests.
  */
 export function parseTranscriptText(text: string): {
   perModel: Map<string, LlmUsageTotals>;
+  perMonth: Map<string, LlmUsageTotals>;
   lastActivity: number | null;
 } {
   const perModel = new Map<string, LlmUsageTotals>();
+  const perMonth = new Map<string, LlmUsageTotals>();
   let lastActivity: number | null = null;
 
   for (const line of text.split('\n')) {
@@ -84,22 +117,24 @@ export function parseTranscriptText(text: string): {
     if (model.startsWith('<')) { continue; }
 
     const totals = perModel.get(model) ?? emptyTotals();
-    totals.inputTokens += usage.input_tokens ?? 0;
-    totals.outputTokens += usage.output_tokens ?? 0;
-    totals.cacheReadTokens += usage.cache_read_input_tokens ?? 0;
-    totals.cacheCreationTokens += usage.cache_creation_input_tokens ?? 0;
-    totals.requests += 1;
+    addUsage(totals, usage);
     perModel.set(model, totals);
 
     if (entry.timestamp) {
       const ts = Date.parse(entry.timestamp);
-      if (!Number.isNaN(ts) && (lastActivity === null || ts > lastActivity)) {
-        lastActivity = ts;
+      if (!Number.isNaN(ts)) {
+        if (lastActivity === null || ts > lastActivity) {
+          lastActivity = ts;
+        }
+        const mk = monthKey(ts);
+        const monthTotals = perMonth.get(mk) ?? emptyTotals();
+        addUsage(monthTotals, usage);
+        perMonth.set(mk, monthTotals);
       }
     }
   }
 
-  return { perModel, lastActivity };
+  return { perModel, perMonth, lastActivity };
 }
 
 export class LlmUsageTracker {
@@ -113,6 +148,7 @@ export class LlmUsageTracker {
   getUsage(workspaceRoot: string, claudeHome?: string): LlmUsage {
     const dir = claudeProjectDir(workspaceRoot, claudeHome);
     const merged = new Map<string, LlmUsageTotals>();
+    const mergedMonths = new Map<string, LlmUsageTotals>();
     let lastActivity: number | null = null;
     let sessionCount = 0;
 
@@ -124,6 +160,7 @@ export class LlmUsageTracker {
         ...emptyTotals(),
         totalTokens: 0,
         byModel: [],
+        byMonth: [],
         sessionCount: 0,
         lastActivity: null,
         available: false,
@@ -152,6 +189,7 @@ export class LlmUsageTracker {
           size: stat.size,
           mtimeMs: stat.mtimeMs,
           perModel: parsed.perModel,
+          perMonth: parsed.perMonth,
           lastActivity: parsed.lastActivity,
         };
         this.fileCache.set(filePath, entry);
@@ -163,23 +201,20 @@ export class LlmUsageTracker {
       }
       for (const [model, totals] of entry.perModel) {
         const acc = merged.get(model) ?? emptyTotals();
-        acc.inputTokens += totals.inputTokens;
-        acc.outputTokens += totals.outputTokens;
-        acc.cacheReadTokens += totals.cacheReadTokens;
-        acc.cacheCreationTokens += totals.cacheCreationTokens;
-        acc.requests += totals.requests;
+        mergeTotals(acc, totals);
         merged.set(model, acc);
+      }
+      for (const [month, totals] of entry.perMonth ?? new Map()) {
+        const acc = mergedMonths.get(month) ?? emptyTotals();
+        mergeTotals(acc, totals);
+        mergedMonths.set(month, acc);
       }
     }
 
     const sum = emptyTotals();
     const byModel: ModelUsage[] = [];
     for (const [model, totals] of merged) {
-      sum.inputTokens += totals.inputTokens;
-      sum.outputTokens += totals.outputTokens;
-      sum.cacheReadTokens += totals.cacheReadTokens;
-      sum.cacheCreationTokens += totals.cacheCreationTokens;
-      sum.requests += totals.requests;
+      mergeTotals(sum, totals);
       byModel.push({
         model,
         ...totals,
@@ -189,10 +224,23 @@ export class LlmUsageTracker {
     }
     byModel.sort((a, b) => b.totalTokens - a.totalTokens);
 
+    const byMonth: MonthlyUsage[] = [];
+    for (const [month, totals] of mergedMonths) {
+      byMonth.push({
+        month,
+        ...totals,
+        totalTokens:
+          totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheCreationTokens,
+      });
+    }
+    // Newest month first.
+    byMonth.sort((a, b) => b.month.localeCompare(a.month));
+
     return {
       ...sum,
       totalTokens: sum.inputTokens + sum.outputTokens + sum.cacheReadTokens + sum.cacheCreationTokens,
       byModel,
+      byMonth,
       sessionCount,
       lastActivity,
       available: true,
