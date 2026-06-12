@@ -9,7 +9,7 @@ const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tokenslayer-stats-'));
 process.env.HOME = tmpHome;
 process.env.USERPROFILE = tmpHome; // Windows fallback
 
-const { recordStats, readStats, aggregate, clearStats, getStatsFilePath } = await import('../build/stats.js');
+const { recordStats, readStats, aggregate, clearStats, getStatsFilePath, monthKeyOf, formatMarkdown, formatTerminal, formatMonthlyCsv, formatMomDelta, getMonthlyAnalysisBudget } = await import('../build/stats.js');
 
 after(() => {
   try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch {}
@@ -248,6 +248,123 @@ describe('aggregate', () => {
     }
     const a = aggregate(records);
     assert.equal(a.timeline.length, 50, 'timeline capped at 50');
+  });
+});
+
+// ---- monthly aggregation ----------------------------------------------------
+
+describe('monthKeyOf', () => {
+  test('extracts YYYY-MM from ISO timestamps', () => {
+    assert.equal(monthKeyOf('2026-06-09T10:00:00.000Z'), '2026-06');
+    assert.equal(monthKeyOf('2025-12-31T23:59:59.999Z'), '2025-12');
+  });
+
+  test('returns null for unparseable timestamps', () => {
+    assert.equal(monthKeyOf('not a date'), null);
+  });
+});
+
+describe('aggregate byMonth', () => {
+  function rec(ts, filePath, original, compacted) {
+    return {
+      timestamp: ts,
+      tool: 'analyze_files',
+      filePath,
+      language: 'typescript',
+      originalTokens: original,
+      compactedTokens: compacted,
+    };
+  }
+
+  test('empty state has empty byMonth', () => {
+    assert.deepEqual(aggregate([]).byMonth, []);
+  });
+
+  test('buckets records into calendar months, newest first', () => {
+    const a = aggregate([
+      rec('2026-05-10T08:00:00.000Z', '/a.ts', 1000, 200),
+      rec('2026-06-01T09:00:00.000Z', '/b.ts', 500, 100),
+      rec('2026-06-15T10:00:00.000Z', '/c.ts', 300, 100),
+    ]);
+
+    assert.equal(a.byMonth.length, 2);
+    assert.equal(a.byMonth[0].month, '2026-06');
+    assert.equal(a.byMonth[0].analyses, 2);
+    assert.equal(a.byMonth[0].calls, 2);
+    assert.equal(a.byMonth[0].uniqueFiles, 2);
+    assert.equal(a.byMonth[0].saved, 600); // (500-100) + (300-100)
+    assert.equal(a.byMonth[1].month, '2026-05');
+    assert.equal(a.byMonth[1].analyses, 1);
+    assert.equal(a.byMonth[1].saved, 800);
+  });
+
+  test('computes per-month reduction and cost', () => {
+    const a = aggregate([
+      rec('2026-06-01T09:00:00.000Z', '/a.ts', 1_000_000, 0),
+    ]);
+    assert.equal(a.byMonth[0].reductionPercent, 100);
+    assert.equal(a.byMonth[0].estimatedCost.gpt4o, 2.50);
+    assert.equal(a.byMonth[0].estimatedCost.claudeSonnet, 3.00);
+  });
+
+  test('records sharing one call timestamp count as one call per month', () => {
+    const ts = '2026-06-01T09:00:00.000Z';
+    const a = aggregate([
+      rec(ts, '/a.ts', 100, 20),
+      rec(ts, '/b.ts', 100, 20),
+    ]);
+    assert.equal(a.byMonth[0].analyses, 2);
+    assert.equal(a.byMonth[0].calls, 1);
+  });
+
+  test('formatMarkdown includes a By Month section', () => {
+    const md = formatMarkdown(aggregate([
+      rec('2026-06-01T09:00:00.000Z', '/a.ts', 1000, 100),
+    ]));
+    assert.ok(md.includes('## By Month'), 'markdown should have By Month section');
+    assert.ok(md.includes('Jun 2026'), 'month should be human-readable');
+  });
+
+  test('formatTerminal includes a By Month section', () => {
+    const out = formatTerminal(aggregate([
+      rec('2026-06-01T09:00:00.000Z', '/a.ts', 1000, 100),
+    ]));
+    assert.ok(out.includes('By Month'), 'terminal output should have By Month section');
+    assert.ok(out.includes('Jun 2026'), 'month should be human-readable');
+  });
+
+  test('computes month-over-month deltas on saved tokens', () => {
+    const a = aggregate([
+      rec('2026-05-10T08:00:00.000Z', '/a.ts', 1000, 200),
+      rec('2026-06-01T09:00:00.000Z', '/b.ts', 500, 100),
+    ]);
+    assert.equal(a.byMonth[0].momSavedDelta, -400);
+    assert.equal(a.byMonth[0].momSavedPercent, -50);
+    assert.equal(a.byMonth[1].momSavedDelta, undefined);
+  });
+
+  test('formatMomDelta renders arrow and percent', () => {
+    assert.equal(formatMomDelta(100, 25), '↑ 100 (+25%)');
+    assert.equal(formatMomDelta(-50, -10), '↓ 50 (-10%)');
+    assert.equal(formatMomDelta(0, 0), '→ flat');
+  });
+
+  test('formatMonthlyCsv includes header and mom columns', () => {
+    const csv = formatMonthlyCsv(aggregate([
+      rec('2026-05-10T08:00:00.000Z', '/a.ts', 1000, 200),
+      rec('2026-06-01T09:00:00.000Z', '/b.ts', 500, 100),
+    ]));
+    assert.ok(csv.startsWith('month,analyses,calls,'));
+    assert.ok(csv.includes('2026-06'));
+    assert.ok(csv.includes('mom_saved_delta'));
+  });
+
+  test('monthlyAnalysisBudget reads TOKENSLAYER_MONTHLY_ANALYSIS_BUDGET', () => {
+    process.env.TOKENSLAYER_MONTHLY_ANALYSIS_BUDGET = '500';
+    assert.equal(getMonthlyAnalysisBudget(), 500);
+    assert.equal(aggregate([]).monthlyAnalysisBudget, 500);
+    delete process.env.TOKENSLAYER_MONTHLY_ANALYSIS_BUDGET;
+    assert.equal(getMonthlyAnalysisBudget(), 0);
   });
 });
 

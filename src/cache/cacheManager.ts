@@ -335,6 +335,17 @@ export class CacheManager {
     return this.timeline.slice(-n);
   }
 
+  /** Token savings rolled up by calendar month (`YYYY-MM`, local time). */
+  getSavingsByMonth(): Record<string, number> {
+    const byMonth: Record<string, number> = {};
+    for (const pt of this.timeline) {
+      const d = new Date(pt.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      byMonth[key] = (byMonth[key] ?? 0) + pt.tokensSaved;
+    }
+    return byMonth;
+  }
+
   /**
    * Get workspace coverage info.
    */
