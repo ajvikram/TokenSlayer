@@ -338,10 +338,23 @@ export class CacheManager {
   /** Token savings rolled up by calendar month (`YYYY-MM`, local time). */
   getSavingsByMonth(): Record<string, number> {
     const byMonth: Record<string, number> = {};
+    for (const [month, stats] of Object.entries(this.getCompactionByMonth())) {
+      byMonth[month] = stats.tokensSaved;
+    }
+    return byMonth;
+  }
+
+  /** Compaction stats per calendar month. */
+  getCompactionByMonth(): Record<string, { tokensSaved: number; analyses: number }> {
+    const byMonth: Record<string, { tokensSaved: number; analyses: number }> = {};
     for (const pt of this.timeline) {
       const d = new Date(pt.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      byMonth[key] = (byMonth[key] ?? 0) + pt.tokensSaved;
+      if (!byMonth[key]) {
+        byMonth[key] = { tokensSaved: 0, analyses: 0 };
+      }
+      byMonth[key].tokensSaved += pt.tokensSaved;
+      byMonth[key].analyses += 1;
     }
     return byMonth;
   }

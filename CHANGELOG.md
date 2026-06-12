@@ -5,6 +5,15 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-06-11
+
+### Added
+
+- **Dedicated Monthly tab** on both the VS Code sidebar and MCP HTML dashboards.
+- **Richer monthly metrics:** requests, LLM tokens (in/out), models used per month,
+  tool calls, compaction savings, analyses, and month-over-month deltas.
+- **Per-month model breakdown** in the LLM usage tracker (`byMonth[].models`).
+
 ## [1.1.0] — 2026-06-11
 
 ### Added

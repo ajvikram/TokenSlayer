@@ -235,6 +235,36 @@ function renderHTML(): string {
       justify-content: space-between;
       align-items: center;
     }
+    .tab-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 4px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-width: 360px;
+    }
+    .tab-bar .tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tab-bar .tab.active {
+      background: var(--accent);
+      color: #0d1117;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .monthly-note { color: var(--muted); font-size: 13px; margin: -8px 0 16px; }
+    tr.month-current td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   </style>
 </head>
 <body>
@@ -250,7 +280,13 @@ function renderHTML(): string {
     </div>
   </div>
 
-  <div id="root"></div>
+  <div class="tab-bar">
+    <button class="tab active" type="button" data-tab="overview">Overview</button>
+    <button class="tab" type="button" data-tab="monthly">📅 Monthly</button>
+  </div>
+
+  <div id="tabOverview" class="tab-panel active"></div>
+  <div id="tabMonthly" class="tab-panel"></div>
   <div class="footer" id="footer"></div>
 
   <script>
@@ -361,142 +397,147 @@ function renderHTML(): string {
       var r = await fetch('/api/stats');
       var a = await r.json();
       lastData = a;
-      var root = document.getElementById('root');
+      var overviewEl = document.getElementById('tabOverview');
+      var monthlyEl = document.getElementById('tabMonthly');
       var footer = document.getElementById('footer');
+      var nowKey = new Date().toISOString().slice(0, 7);
 
       if (a.totalAnalyses === 0) {
-        root.innerHTML = '<div class="empty"><div class="icon">📊</div><div><strong>No analyses recorded yet.</strong></div><div style="margin-top:8px;font-size:13px;">Ask your AI assistant a code question — it should call <code>analyze_files</code> or <code>analyze_workspace</code>, and stats will appear here.</div></div>';
+        var empty = '<div class="empty"><div class="icon">📊</div><div><strong>No analyses recorded yet.</strong></div><div style="margin-top:8px;font-size:13px;">Ask your AI assistant a code question — it should call <code>analyze_files</code> or <code>analyze_workspace</code>, and stats will appear here.</div></div>';
+        overviewEl.innerHTML = empty;
+        monthlyEl.innerHTML = empty;
         footer.innerHTML = 'Waiting for first MCP call...';
         return;
       }
 
       var maxLangSaved = Math.max.apply(null, Object.values(a.byLanguage).map(function(l) { return l.saved; }));
+      var overview = '';
 
-      var html = '';
+      overview += '<div class="grid">';
+      overview += '<div class="card hero"><div class="label">Total Tokens Saved</div>';
+      overview += '<div class="value">' + fmtNum(a.totalSaved) + '</div>';
+      overview += '<div class="meta">' + a.reductionPercent + '% reduction · ' + fmtNum(a.totalOriginalTokens) + ' → ' + fmtNum(a.totalCompactedTokens) + ' tokens</div></div>';
+      overview += '</div>';
 
-      // Hero card
-      html += '<div class="grid">';
-      html += '<div class="card hero"><div class="label">Total Tokens Saved</div>';
-      html += '<div class="value">' + fmtNum(a.totalSaved) + '</div>';
-      html += '<div class="meta">' + a.reductionPercent + '% reduction · ' + fmtNum(a.totalOriginalTokens) + ' → ' + fmtNum(a.totalCompactedTokens) + ' tokens</div></div>';
-      html += '</div>';
+      overview += '<div class="grid">';
+      overview += '<div class="card"><div class="label">Tokens Processed</div><div class="value">' + fmtNum(a.totalOriginalTokens) + '</div><div class="meta">total input tokens analyzed</div></div>';
+      overview += '<div class="card"><div class="label">Est. Cost Saved</div><div class="value cost-highlight">' + esc(a.estimatedCost.label) + '</div><div class="meta">GPT-4o $' + a.estimatedCost.gpt4o.toFixed(2) + ' · Sonnet $' + a.estimatedCost.claudeSonnet.toFixed(2) + '</div></div>';
+      overview += '<div class="card"><div class="label">Avg Saved / File</div><div class="value highlight">' + fmtNum(a.avgSavedPerFile) + '</div><div class="meta">tokens per unique file</div></div>';
+      overview += '<div class="card"><div class="label">Unique Files</div><div class="value">' + fmtNum(a.uniqueFiles) + '</div><div class="meta">' + fmtNum(a.totalAnalyses) + ' total analyses</div></div>';
+      overview += '<div class="card"><div class="label">MCP Calls</div><div class="value">' + fmtNum(a.totalCalls) + '</div><div class="meta">last: ' + fmtRelTime(a.lastCall) + '</div></div>';
+      overview += '<div class="card"><div class="label">Reduction</div><div class="value highlight">' + a.reductionPercent + '%</div><div class="meta">avg token compaction · see Monthly tab</div></div>';
+      overview += '</div>';
 
-      // Stat cards row
-      html += '<div class="grid">';
-      html += '<div class="card"><div class="label">Tokens Processed</div><div class="value">' + fmtNum(a.totalOriginalTokens) + '</div><div class="meta">total input tokens analyzed</div></div>';
-      html += '<div class="card"><div class="label">Est. Cost Saved</div><div class="value cost-highlight">' + esc(a.estimatedCost.label) + '</div><div class="meta">GPT-4o $' + a.estimatedCost.gpt4o.toFixed(2) + ' · Sonnet $' + a.estimatedCost.claudeSonnet.toFixed(2) + '</div></div>';
-      html += '<div class="card"><div class="label">Avg Saved / File</div><div class="value highlight">' + fmtNum(a.avgSavedPerFile) + '</div><div class="meta">tokens per unique file</div></div>';
-      html += '<div class="card"><div class="label">Unique Files</div><div class="value">' + fmtNum(a.uniqueFiles) + '</div><div class="meta">' + fmtNum(a.totalAnalyses) + ' total analyses</div></div>';
-      html += '<div class="card"><div class="label">MCP Calls</div><div class="value">' + fmtNum(a.totalCalls) + '</div><div class="meta">last: ' + fmtRelTime(a.lastCall) + '</div></div>';
-      html += '<div class="card"><div class="label">Reduction</div><div class="value highlight">' + a.reductionPercent + '%</div><div class="meta">avg token compaction</div></div>';
-
-      // This-month card (budgets roll monthly)
-      var nowKey = new Date().toISOString().slice(0, 7);
-      var curMonth = (a.byMonth || []).find(function(m) { return m.month === nowKey; });
-      if (curMonth) {
-        html += '<div class="card"><div class="label">This Month</div><div class="value highlight">' + fmtNum(curMonth.saved) + '</div>';
-        html += '<div class="meta">' + fmtNum(curMonth.analyses) + ' analyses · ' + fmtNum(curMonth.calls) + ' calls · ' + esc(curMonth.estimatedCost.label) + ' saved</div>';
-        if (a.monthlyAnalysisBudget > 0) {
-          var budgetPct = Math.min(100, Math.round((curMonth.analyses / a.monthlyAnalysisBudget) * 100));
-          var overBudget = curMonth.analyses > a.monthlyAnalysisBudget;
-          html += '<div class="meta" style="margin-top:6px;">Budget: ' + fmtNum(curMonth.analyses) + ' / ' + fmtNum(a.monthlyAnalysisBudget) + ' analyses'
-            + (overBudget ? ' <span style="color:var(--red);">over</span>' : '') + '</div>';
-          html += '<div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden;">';
-          html += '<div style="height:100%;width:' + budgetPct + '%;background:' + (overBudget ? 'var(--red)' : 'var(--accent)') + ';border-radius:2px;"></div></div>';
-        }
-        html += '</div>';
-      }
-      html += '</div>';
-
-      // Sparkline
       if (a.timeline && a.timeline.length >= 2) {
-        html += '<div class="sparkline-container">';
-        html += '<div class="sparkline-header"><h2>Savings Over Time</h2>';
-        html += '<span class="sparkline-total">cumulative: ' + fmtNum(a.totalSaved) + ' tokens</span></div>';
-        html += '<canvas id="sparkCanvas" width="800" height="80"></canvas>';
-        html += '</div>';
+        overview += '<div class="sparkline-container">';
+        overview += '<div class="sparkline-header"><h2>Savings Over Time</h2>';
+        overview += '<span class="sparkline-total">cumulative: ' + fmtNum(a.totalSaved) + ' tokens</span></div>';
+        overview += '<canvas id="sparkCanvas" width="800" height="80"></canvas>';
+        overview += '</div>';
       }
 
-      // Monthly breakdown (newest first)
-      if (a.byMonth && a.byMonth.length > 0) {
-        var maxMonthSaved = Math.max.apply(null, a.byMonth.map(function(m) { return m.saved; })) || 1;
-        html += '<div class="section"><h2>📅 Monthly Breakdown</h2><table>';
-        html += '<thead><tr><th>Month</th><th class="num">Analyses</th><th class="num">Calls</th><th class="num">Files</th><th class="num">Tokens Saved</th><th class="num">Reduction</th><th class="num">Est. Cost Saved</th><th class="num">vs Prev</th><th></th></tr></thead><tbody>';
-        for (var mi = 0; mi < Math.min(a.byMonth.length, 12); mi++) {
-          var mo = a.byMonth[mi];
-          var isCur = mo.month === nowKey;
-          var mw = Math.max(2, Math.round((mo.saved / maxMonthSaved) * 140));
-          var momLabel = mo.momSavedDelta != null
-            ? formatMomDelta(mo.momSavedDelta, mo.momSavedPercent)
-            : '—';
-          html += '<tr' + (isCur ? ' style="background:color-mix(in srgb, var(--accent) 6%, transparent);"' : '') + '>';
-          html += '<td><strong>' + esc(fmtMonthLabel(mo.month)) + '</strong>' + (isCur ? ' <span style="font-size:10px;color:var(--accent);text-transform:uppercase;">current</span>' : '') + '</td>';
-          html += '<td class="num">' + fmtNum(mo.analyses) + '</td>';
-          html += '<td class="num">' + fmtNum(mo.calls) + '</td>';
-          html += '<td class="num">' + fmtNum(mo.uniqueFiles) + '</td>';
-          html += '<td class="num">' + fmtNum(mo.saved) + '</td>';
-          html += '<td class="num pct">' + mo.reductionPercent + '%</td>';
-          html += '<td class="num" style="color:var(--yellow);">' + esc(mo.estimatedCost.label) + '</td>';
-          html += '<td class="num" style="font-size:11px;color:var(--muted);">' + esc(momLabel) + '</td>';
-          html += '<td><span class="bar" style="width:' + mw + 'px;"></span></td></tr>';
-        }
-        html += '</tbody></table></div>';
-      }
-
-      // Language table
       var langs = Object.entries(a.byLanguage).sort(function(x, y) { return y[1].saved - x[1].saved; });
       if (langs.length > 0) {
-        html += '<div class="section"><h2>By Language</h2><table>';
-        html += '<thead><tr><th>Language</th><th class="num">Files</th><th class="num">Original</th><th class="num">Compacted</th><th class="num">Tokens Saved</th><th class="num">Reduction</th><th></th></tr></thead><tbody>';
+        overview += '<div class="section"><h2>By Language</h2><table>';
+        overview += '<thead><tr><th>Language</th><th class="num">Files</th><th class="num">Original</th><th class="num">Compacted</th><th class="num">Tokens Saved</th><th class="num">Reduction</th><th></th></tr></thead><tbody>';
         for (var li = 0; li < langs.length; li++) {
           var name = langs[li][0];
           var s = langs[li][1];
           var w = maxLangSaved > 0 ? Math.max(2, Math.round((s.saved / maxLangSaved) * 140)) : 0;
-          html += '<tr><td><strong>' + esc(name) + '</strong></td>';
-          html += '<td class="num">' + fmtNum(s.files) + '</td>';
-          html += '<td class="num">' + fmtNum(s.original) + '</td>';
-          html += '<td class="num">' + fmtNum(s.compacted) + '</td>';
-          html += '<td class="num">' + fmtNum(s.saved) + '</td>';
-          html += '<td class="num pct">' + s.reductionPercent + '%</td>';
-          html += '<td><span class="bar" style="width:' + w + 'px;"></span></td></tr>';
+          overview += '<tr><td><strong>' + esc(name) + '</strong></td>';
+          overview += '<td class="num">' + fmtNum(s.files) + '</td>';
+          overview += '<td class="num">' + fmtNum(s.original) + '</td>';
+          overview += '<td class="num">' + fmtNum(s.compacted) + '</td>';
+          overview += '<td class="num">' + fmtNum(s.saved) + '</td>';
+          overview += '<td class="num pct">' + s.reductionPercent + '%</td>';
+          overview += '<td><span class="bar" style="width:' + w + 'px;"></span></td></tr>';
         }
-        html += '</tbody></table></div>';
+        overview += '</tbody></table></div>';
       }
 
-      // Top savers
       if (a.topSavers.length > 0) {
-        html += '<div class="section"><h2>Top Savers</h2><table>';
-        html += '<thead><tr><th>File</th><th>Language</th><th class="num">Tokens Saved</th><th class="num">Reduction</th></tr></thead><tbody>';
+        overview += '<div class="section"><h2>Top Savers</h2><table>';
+        overview += '<thead><tr><th>File</th><th>Language</th><th class="num">Tokens Saved</th><th class="num">Reduction</th></tr></thead><tbody>';
         for (var ti = 0; ti < a.topSavers.length; ti++) {
           var t = a.topSavers[ti];
-          html += '<tr><td class="file">' + esc(shortPath(t.filePath, 70)) + '</td>';
-          html += '<td>' + esc(t.language) + '</td>';
-          html += '<td class="num">' + fmtNum(t.saved) + '</td>';
-          html += '<td class="num pct">' + t.reductionPercent + '%</td></tr>';
+          overview += '<tr><td class="file">' + esc(shortPath(t.filePath, 70)) + '</td>';
+          overview += '<td>' + esc(t.language) + '</td>';
+          overview += '<td class="num">' + fmtNum(t.saved) + '</td>';
+          overview += '<td class="num pct">' + t.reductionPercent + '%</td></tr>';
         }
-        html += '</tbody></table></div>';
+        overview += '</tbody></table></div>';
       }
 
-      // Recent activity
       if (a.recentActivity.length > 0) {
-        html += '<div class="section"><h2>Recent Activity</h2><table>';
-        html += '<thead><tr><th>When</th><th>Tool</th><th>File</th><th class="num">Original</th><th class="num">Compacted</th><th class="num">Saved</th></tr></thead><tbody>';
+        overview += '<div class="section"><h2>Recent Activity</h2><table>';
+        overview += '<thead><tr><th>When</th><th>Tool</th><th>File</th><th class="num">Original</th><th class="num">Compacted</th><th class="num">Saved</th></tr></thead><tbody>';
         for (var ri = 0; ri < Math.min(a.recentActivity.length, 15); ri++) {
           var ra = a.recentActivity[ri];
           var saved = ra.originalTokens - ra.compactedTokens;
-          html += '<tr><td>' + fmtRelTime(ra.timestamp) + '</td>';
-          html += '<td><code>' + esc(ra.tool) + '</code></td>';
-          html += '<td class="file">' + esc(shortPath(ra.filePath, 60)) + '</td>';
-          html += '<td class="num">' + fmtNum(ra.originalTokens) + '</td>';
-          html += '<td class="num">' + fmtNum(ra.compactedTokens) + '</td>';
-          html += '<td class="num pct">' + fmtNum(saved) + '</td></tr>';
+          overview += '<tr><td>' + fmtRelTime(ra.timestamp) + '</td>';
+          overview += '<td><code>' + esc(ra.tool) + '</code></td>';
+          overview += '<td class="file">' + esc(shortPath(ra.filePath, 60)) + '</td>';
+          overview += '<td class="num">' + fmtNum(ra.originalTokens) + '</td>';
+          overview += '<td class="num">' + fmtNum(ra.compactedTokens) + '</td>';
+          overview += '<td class="num pct">' + fmtNum(saved) + '</td></tr>';
         }
-        html += '</tbody></table></div>';
+        overview += '</tbody></table></div>';
       }
 
-      root.innerHTML = html;
+      overviewEl.innerHTML = overview;
 
-      // Draw sparkline after DOM is updated
+      // Monthly tab
+      var monthly = '';
+      var curMonth = (a.byMonth || []).find(function(m) { return m.month === nowKey; });
+      monthly += '<p class="monthly-note">Per-calendar-month MCP usage — analyses, calls, tokens processed, compaction savings, and cost estimates.</p>';
+
+      if (curMonth) {
+        monthly += '<div class="grid">';
+        monthly += '<div class="card"><div class="label">This Month · Analyses</div><div class="value">' + fmtNum(curMonth.analyses) + '</div><div class="meta">' + fmtNum(curMonth.calls) + ' MCP calls</div></div>';
+        monthly += '<div class="card"><div class="label">Tokens Processed</div><div class="value">' + fmtNum(curMonth.original) + '</div><div class="meta">→ ' + fmtNum(curMonth.compacted) + ' compacted</div></div>';
+        monthly += '<div class="card"><div class="label">Tokens Saved</div><div class="value highlight">' + fmtNum(curMonth.saved) + '</div><div class="meta">' + curMonth.reductionPercent + '% reduction</div></div>';
+        monthly += '<div class="card"><div class="label">Est. Cost Saved</div><div class="value cost-highlight">' + esc(curMonth.estimatedCost.label) + '</div><div class="meta">' + fmtNum(curMonth.uniqueFiles) + ' unique files</div></div>';
+        monthly += '</div>';
+        if (a.monthlyAnalysisBudget > 0) {
+          var budgetPct = Math.min(100, Math.round((curMonth.analyses / a.monthlyAnalysisBudget) * 100));
+          var overBudget = curMonth.analyses > a.monthlyAnalysisBudget;
+          monthly += '<div class="card" style="margin-bottom:20px;"><div class="label">Monthly Analysis Budget</div>';
+          monthly += '<div class="meta">' + fmtNum(curMonth.analyses) + ' / ' + fmtNum(a.monthlyAnalysisBudget) + ' analyses'
+            + (overBudget ? ' <span style="color:var(--red);">over budget</span>' : '') + '</div>';
+          monthly += '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden;">';
+          monthly += '<div style="height:100%;width:' + budgetPct + '%;background:' + (overBudget ? 'var(--red)' : 'var(--accent)') + ';border-radius:3px;"></div></div></div>';
+        }
+      }
+
+      if (a.byMonth && a.byMonth.length > 0) {
+        var maxMonthSaved = Math.max.apply(null, a.byMonth.map(function(m) { return m.saved; })) || 1;
+        monthly += '<div class="section"><h2>Monthly Breakdown</h2><table>';
+        monthly += '<thead><tr><th>Month</th><th class="num">Analyses</th><th class="num">Calls</th><th class="num">Files</th><th class="num">Original</th><th class="num">Compacted</th><th class="num">Saved</th><th class="num">Reduction</th><th class="num">Est. Cost</th><th class="num">vs Prev</th><th></th></tr></thead><tbody>';
+        for (var mi = 0; mi < Math.min(a.byMonth.length, 12); mi++) {
+          var mo = a.byMonth[mi];
+          var isCur = mo.month === nowKey;
+          var mw = Math.max(2, Math.round((mo.saved / maxMonthSaved) * 140));
+          var momLabel = mo.momSavedDelta != null ? formatMomDelta(mo.momSavedDelta, mo.momSavedPercent) : '—';
+          monthly += '<tr class="' + (isCur ? 'month-current' : '') + '">';
+          monthly += '<td><strong>' + esc(fmtMonthLabel(mo.month)) + '</strong>' + (isCur ? ' <span style="font-size:10px;color:var(--accent);text-transform:uppercase;">current</span>' : '') + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.analyses) + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.calls) + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.uniqueFiles) + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.original) + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.compacted) + '</td>';
+          monthly += '<td class="num">' + fmtNum(mo.saved) + '</td>';
+          monthly += '<td class="num pct">' + mo.reductionPercent + '%</td>';
+          monthly += '<td class="num" style="color:var(--yellow);">' + esc(mo.estimatedCost.label) + '</td>';
+          monthly += '<td class="num" style="font-size:11px;color:var(--muted);">' + esc(momLabel) + '</td>';
+          monthly += '<td><span class="bar" style="width:' + mw + 'px;"></span></td></tr>';
+        }
+        monthly += '</tbody></table></div>';
+      } else {
+        monthly += '<div class="empty"><div class="icon">📅</div>No monthly data yet.</div>';
+      }
+
+      monthlyEl.innerHTML = monthly;
+
       if (a.timeline && a.timeline.length >= 2) {
         drawSparkline('sparkCanvas', a.timeline);
       }
@@ -504,6 +545,17 @@ function renderHTML(): string {
       footer.innerHTML = '<span>First call: ' + fmtRelTime(a.firstCall) + ' · Last call: ' + fmtRelTime(a.lastCall) + '</span>'
         + '<span>Stats file: ' + esc(a.firstCall ? '~/.tokenslayer/stats.jsonl' : '') + '</span>';
     }
+
+    document.querySelectorAll('.tab-bar .tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var tab = btn.getAttribute('data-tab');
+        document.querySelectorAll('.tab-bar .tab').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+        });
+        document.getElementById('tabOverview').classList.toggle('active', tab === 'overview');
+        document.getElementById('tabMonthly').classList.toggle('active', tab === 'monthly');
+      });
+    });
 
     document.getElementById('exportBtn').addEventListener('click', function() {
       window.open('/api/export', '_blank');
@@ -513,7 +565,7 @@ function renderHTML(): string {
     });
 
     render().catch(function(e) {
-      document.getElementById('root').innerHTML = '<div class="empty"><div class="icon">⚠️</div>Failed to load stats: ' + e.message + '</div>';
+      document.getElementById('tabOverview').innerHTML = '<div class="empty"><div class="icon">⚠️</div>Failed to load stats: ' + e.message + '</div>';
     });
     setInterval(render, 5000);
   </script>
