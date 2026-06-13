@@ -116,9 +116,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       }
     }
 
-    const monthlyBudget = vscode.workspace
-      .getConfiguration('tokenslayer')
-      .get<number>('monthlyRequestBudget', 0);
+    const config = vscode.workspace.getConfiguration('tokenslayer');
+    const monthlyBudget = config.get<number>('monthlyRequestBudget', 0);
+    const budgetScope = config.get<'copilot' | 'combined'>('budgetScope', 'copilot');
 
     this.view.webview.postMessage({
       type: 'update',
@@ -137,19 +137,27 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       toolInvocationsByMonth: this.toolTracker?.getByMonth() ?? {},
       compactionByMonth: this.cacheManager.getCompactionByMonth(),
       monthlyRequestBudget: monthlyBudget,
-      forecast: this.computeForecast(llmUsage, copilotUsage, monthlyBudget),
+      budgetScope,
+      forecast: this.computeForecast(llmUsage, copilotUsage, monthlyBudget, budgetScope),
     });
   }
 
   /**
-   * Linear month-end projection of combined requests (LLM + tool calls) for the
-   * current calendar month. Kept in TS (not the webview) so the burn-rate math
-   * is unit-tested. Returns null when there's no current-month usage to project.
+   * Linear month-end projection for the current calendar month. Kept in TS (not
+   * the webview) so the burn-rate math is unit-tested.
+   *
+   * When a budget is set, the projection tracks the metric the budget actually
+   * constrains (`budgetScope`): Copilot has a monthly premium-request quota,
+   * whereas Claude Code API calls are token-billed with no request quota — so
+   * projecting combined requests against a Copilot budget would be misleading.
+   * With no budget set, we project combined activity (the general "how busy is
+   * this month" number). Returns null when there's nothing to project.
    */
   private computeForecast(
     llmUsage: ReturnType<LlmUsageTracker['getUsage']> | null,
     copilotUsage: ReturnType<CopilotUsageTracker['getUsage']> | null,
-    monthlyBudget: number
+    monthlyBudget: number,
+    budgetScope: 'copilot' | 'combined'
   ): ReturnType<typeof projectMonthEnd> | null {
     const nowKey = monthKey(Date.now());
     const llmRequests =
@@ -158,7 +166,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       copilotUsage?.byMonth?.find((m) => m.month === nowKey)?.requests ?? 0;
     const toolCounts = this.toolTracker?.getByMonth()?.[nowKey] ?? {};
     const toolCalls = Object.values(toolCounts).reduce((s, n) => s + n, 0);
-    const used = llmRequests + copilotRequests + toolCalls;
+    const combined = llmRequests + copilotRequests + toolCalls;
+    // Budget set + copilot scope → project Copilot only; otherwise project combined.
+    const scopeToCopilot = monthlyBudget > 0 && budgetScope === 'copilot';
+    const used = scopeToCopilot ? copilotRequests : combined;
     if (used === 0) { return null; }
     return projectMonthEnd(used, new Date(), monthlyBudget);
   }
@@ -777,9 +788,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           message.copilotUsage,
           message.toolInvocationsByMonth || {},
           message.compactionByMonth || {},
-          message.monthlyRequestBudget || 0
+          message.monthlyRequestBudget || 0,
+          message.budgetScope || 'copilot'
         );
-        renderForecast(message.forecast);
+        var fcNoun = (message.monthlyRequestBudget > 0 && (message.budgetScope || 'copilot') === 'copilot')
+          ? 'Copilot requests' : 'requests';
+        renderForecast(message.forecast, fcNoun);
 
         // Timeline sparkline
         drawTimeline(message.timeline);
@@ -913,7 +927,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     }
 
     // Merge LLM usage months and tool-call months into one newest-first list.
-    function renderMonthlyUsage(llm, copilot, toolsByMonth, compactionByMonth, monthlyBudget) {
+    function renderMonthlyUsage(llm, copilot, toolsByMonth, compactionByMonth, monthlyBudget, budgetScope) {
       var summaryEl = document.getElementById('monthlySummaryCards');
       var tableWrap = document.getElementById('monthlyTableWrap');
       var tableBody = document.getElementById('monthlyTableBody');
@@ -971,10 +985,16 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         ? (combinedReq + ' req this month')
         : '';
 
+      var curCache = Math.max(0, (cur.tokens || 0) - (cur.input || 0) - (cur.output || 0));
+      var llmTokensSub = cur.input
+        ? compactNum(cur.input) + ' in · ' + compactNum(cur.output) + ' out'
+            + (curCache ? ' · ' + compactNum(curCache) + ' cache' : '')
+        : 'Claude Code';
+      var copilotSessions = (copilot && copilot.available) ? (copilot.sessionCount || 0) : 0;
       summaryEl.innerHTML = [
         { label: 'Requests', value: combinedReq || '0', sub: (cur.requests || 0) + ' Claude · ' + (cur.copilotRequests || 0) + ' Copilot · ' + (cur.toolCalls || 0) + ' tools' },
-        { label: 'Copilot Req', value: cur.copilotRequests || '0', sub: (copilot && copilot.available ? (copilot.totalRequests || 0) + ' all-time · ' + (copilot.sessionCount || 0) + ' sessions' : 'no chat sessions found') },
-        { label: 'LLM Tokens', value: cur.tokens ? compactNum(cur.tokens) : '0', sub: cur.input ? compactNum(cur.input) + ' in · ' + compactNum(cur.output) + ' out' : 'Claude Code' },
+        { label: 'Copilot Req', value: cur.copilotRequests || '0', sub: (copilot && copilot.available ? (copilot.totalRequests || 0) + ' all-time · ' + copilotSessions + (copilotSessions === 1 ? ' session' : ' sessions') : 'no chat sessions found') },
+        { label: 'LLM Tokens', value: cur.tokens ? compactNum(cur.tokens) : '0', sub: llmTokensSub },
         { label: 'Models', value: cur.models && cur.models.length ? cur.models.length : '0', sub: cur.models && cur.models.length ? shortModelName(cur.models[0].model) : 'none yet' },
         { label: 'Tokens Saved', value: cur.saved ? compactNum(cur.saved) : '0', sub: (cur.analyses || 0) + ' analyses' },
       ].map(function(c) {
@@ -984,12 +1004,17 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       }).join('');
 
       if (monthlyBudget > 0) {
-        var used = combinedReq;
+        // Count only what the budget actually constrains. Copilot has a monthly
+        // premium-request quota; Claude API calls are token-billed with no
+        // request quota, so 'copilot' is the default scope.
+        var scopeCopilot = budgetScope === 'copilot';
+        var used = scopeCopilot ? (cur.copilotRequests || 0) : combinedReq;
+        var scopeLabel = scopeCopilot ? ' Copilot requests' : ' requests';
         var pct = Math.min(100, Math.round((used / monthlyBudget) * 100));
         var over = used > monthlyBudget;
         budgetEl.style.display = '';
         budgetEl.innerHTML = '<div class="month-budget-label">'
-          + used + ' / ' + monthlyBudget + ' requests'
+          + used + ' / ' + monthlyBudget + scopeLabel
           + (over ? ' <span class="mom-up">over budget</span>' : '')
           + '</div>'
           + '<div class="lang-bar-bg"><div class="lang-bar-fill' + (over ? ' budget-over' : '') + '" style="width:' + pct + '%"></div></div>';
@@ -1013,7 +1038,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         return '<tr class="' + (isCurrent ? 'month-row-current' : '') + '">'
           + '<td><strong>' + monthLabel(k) + '</strong>' + (isCurrent ? ' <span class="month-badge">current</span>' : '') + '</td>'
           + '<td class="num">' + (reqTotal || '—') + '</td>'
-          + '<td class="num"' + (m.copilotModels && m.copilotModels.length ? ' title="' + escapeHtml(m.copilotModels.map(function(x) { return x.model + ' ×' + x.requests; }).join(', ')) + '"' : '') + '>' + (m.copilotRequests || '—') + '</td>'
+          + '<td class="num"' + (m.copilotModels && m.copilotModels.length ? ' title="' + escapeHtml(m.copilotModels.map(function(x) { return x.model + ' ×' + x.requests; }).join(', ')) + '"' : '') + '>' + (m.copilotRequests ? m.copilotRequests : (copilot && copilot.available ? 0 : '—')) + '</td>'
           + '<td class="num">' + (m.tokens ? compactNum(m.tokens) : '—') + '</td>'
           + '<td class="num">' + (m.input ? compactNum(m.input) + ' / ' + compactNum(m.output) : '—') + '</td>'
           + '<td class="models-cell" title="' + escapeHtml((m.models || []).map(function(x) { return x.model; }).join(', ')) + '">' + escapeHtml(formatModelsList(m.models)) + '</td>'
@@ -1025,7 +1050,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       }).join('');
     }
 
-    function renderForecast(f) {
+    function renderForecast(f, noun) {
       var el = document.getElementById('monthlyForecast');
       if (!el) { return; }
       if (!f || !f.projected) {
@@ -1036,7 +1061,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       var rate = f.dailyRate >= 10 ? Math.round(f.dailyRate) : Math.round(f.dailyRate * 10) / 10;
       var lead = f.reliable ? '📈 On pace for ' : '📈 Early estimate: ~';
       var parts = ['<span class="forecast-main">' + lead + '<strong>' + compactNum(f.projected)
-        + '</strong> requests by month-end</span>'];
+        + '</strong> ' + (noun || 'requests') + ' by month-end</span>'];
       parts.push('<span class="forecast-sub">' + rate + '/day · ' + Math.round(f.daysRemaining) + ' days left</span>');
       if (f.hitBudgetDay) {
         parts.push('<span class="forecast-warn mom-up">⚠ on track to hit budget around the '

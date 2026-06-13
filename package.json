@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache \u2014 Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
@@ -350,7 +350,20 @@
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "description": "Monthly cap on combined LLM requests + TokenSlayer tool calls. Shows a progress bar on the dashboard when set (0 = disabled)."
+          "description": "Monthly request budget. Shows a progress bar + month-end forecast on the dashboard when set (0 = disabled). What counts toward it is controlled by tokenslayer.budgetScope."
+        },
+        "tokenslayer.budgetScope": {
+          "type": "string",
+          "default": "copilot",
+          "enum": [
+            "copilot",
+            "combined"
+          ],
+          "enumDescriptions": [
+            "Count only GitHub Copilot requests (the metric with a monthly premium-request quota).",
+            "Count all requests — Claude Code API calls + Copilot + TokenSlayer tool calls."
+          ],
+          "description": "Which requests the monthly budget and forecast track. Copilot has a monthly premium-request quota; Claude Code API calls are token-billed with no request quota, so 'copilot' is the default."
         }
       }
     }

@@ -64,6 +64,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency chain analysis, structural patching, secrets detection, usage
   tracking, tool invocation tracking) are stable and tested.
 
+## [1.4.1] — 2026-06-13
+
+### Changed
+
+- **Monthly budget + forecast now track a configurable scope** via the new
+  `tokenslayer.budgetScope` setting (`copilot` | `combined`, default
+  `copilot`). Copilot has a monthly premium-request quota; Claude Code API
+  calls are token-billed with no request quota, so projecting combined
+  requests against a Copilot budget was misleading. With a budget set, the
+  budget bar and month-end forecast count only Copilot requests by default
+  (set `combined` to include Claude + tool calls). With no budget set, the
+  forecast still shows combined activity.
+- **LLM Tokens card now accounts for cached tokens.** The sub-label showed
+  only "in · out", leaving the bulk of the total (Claude Code's cache reads)
+  unexplained — e.g. 67.0M total under "9.6K in · 404K out". It now appends
+  "· N cache" so the headline number reconciles.
+
+### Fixed
+
+- Copilot column shows `0` (not `—`) for months where Copilot tracking is
+  available but had no requests, matching the summary card.
+- "1 session" is no longer rendered as "1 sessions".
+
 ## [1.4.0] — 2026-06-12
 
 ### Added
