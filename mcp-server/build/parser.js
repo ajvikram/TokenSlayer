@@ -28,6 +28,16 @@ export function tokenize(text, targetModel) {
     }
     return Math.ceil(text.length / 4);
 }
+/**
+ * Structural density below which a large file's skeleton is considered low-yield.
+ * Calibrated on real files: IIFE/bundled files land at ~7-8 skeleton-lines per
+ * 1000 source lines (lodash 8.2, an esbuild bundle 7.0), while conventionally
+ * structured files sit at 23+ (a 1137-line class 23.7, others 25-143). 12 sits
+ * in the gap with margin on both sides.
+ */
+const LOW_YIELD_DENSITY = 12;
+/** Only flag files large enough that a collapse actually matters. */
+const LOW_YIELD_MIN_LINES = 400;
 export function getLanguage(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.py')
@@ -1176,12 +1186,17 @@ export function analyzeFile(filePath) {
         const reductionPercent = originalTokens > 0 ? Math.round(((originalTokens - compactedTokens) / originalTokens) * 100) : 0;
         const fileName = path.basename(filePath);
         const header = `// ${fileName} (${originalLines} lines → ${skeletonLines}-line skeleton)\n\n`;
+        // Detect the IIFE/bundled collapse: a large file whose skeleton is far too
+        // sparse to have captured its real (nested) symbols.
+        const density = originalLines > 0 ? (skeletonLines / originalLines) * 1000 : Infinity;
+        const lowYield = originalLines >= LOW_YIELD_MIN_LINES && density < LOW_YIELD_DENSITY;
         return {
             filePath,
             originalTokens,
             compactedTokens,
             reductionPercent,
-            skeleton: header + skeleton
+            skeleton: header + skeleton,
+            lowYield
         };
     }
     catch (err) {

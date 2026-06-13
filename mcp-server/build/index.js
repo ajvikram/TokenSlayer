@@ -21,7 +21,7 @@ class TokenSlayerServer {
     constructor() {
         this.server = new Server({
             name: "tokenslayer-mcp-server",
-            version: "1.2.0",
+            version: "1.3.0",
         }, {
             capabilities: {
                 tools: {},
@@ -424,16 +424,21 @@ class TokenSlayerServer {
                 originalTokens: r.originalTokens,
                 compactedTokens: r.compactedTokens,
                 reductionPercent: r.reductionPercent,
+                lowYield: r.lowYield ?? false,
                 skeleton: r.skeleton,
             });
         }
+        // Files whose skeleton collapsed (IIFE/bundled/minified) — the reduction %
+        // looks great but nested symbols were dropped. Warn so the caller doesn't
+        // trust an empty husk.
+        const lowYieldFiles = results.filter(r => !r.error && r.lowYield).map(r => r.filePath);
         recordStats(successful, tool);
         const totalSaved = totalOriginal > 0
             ? Math.round(((totalOriginal - totalCompacted) / totalOriginal) * 100)
             : 0;
         if (format === 'json') {
             const payload = {
-                summary: { totalOriginalTokens: totalOriginal, totalCompactedTokens: totalCompacted, reductionPercent: totalSaved, filesAnalyzed: results.length },
+                summary: { totalOriginalTokens: totalOriginal, totalCompactedTokens: totalCompacted, reductionPercent: totalSaved, filesAnalyzed: results.length, lowYieldFiles },
                 files: jsonResults,
             };
             return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
@@ -447,6 +452,13 @@ class TokenSlayerServer {
                     `To go deeper: pass symbol/query to target what you need, expand_node for a tagged block, ` +
                     `or maxTokens to raise the budget (0 = unlimited).]`;
             }
+        }
+        if (lowYieldFiles.length > 0) {
+            const names = lowYieldFiles.map((f) => f.split('/').pop()).join(', ');
+            contents += `\n\n[⚠ Low-yield skeleton: ${names} — this looks like a bundled/minified or ` +
+                `IIFE/closure-wrapped file, so its real symbols are nested inside a collapsed body and the ` +
+                `skeleton above likely omits them. The high reduction % is misleading here. To find a symbol ` +
+                `in these files, grep or read targeted line ranges instead of relying on the skeleton.]`;
         }
         const text = `📊 Session Stats: Saved ${totalSaved}% tokens (${totalOriginal} -> ${totalCompacted})\n\n${contents}`;
         return {
