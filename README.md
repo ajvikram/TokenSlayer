@@ -108,6 +108,7 @@ A real-time analytics dashboard with:
 - **📈 Stats Grid** — Reduction %, files analyzed, cache hit rate, cached entries, tokens processed, avg saved/file
 - **💰 Estimated Cost Saved** — Real-time cost estimates for GPT-4o and Claude Sonnet based on actual token savings
 - **🤖 LLM Tokens Used** — Real token consumption for the workspace (input/output/cache, per-model breakdown), aggregated from Claude Code session transcripts
+- **💬 Copilot Requests (monthly + total)** — Counts GitHub Copilot chat/agent requests for the workspace by parsing VS Code's local chat-session logs — per month, per model, and all-time — shown beside Claude usage in the Monthly tab, the budget bar, the forecast, and the CSV export. Local heuristic, not GitHub's billed premium-request meter.
 - **📅 Monthly Tab + Forecast** — Per-calendar-month requests, tokens, models, tool calls, and compaction savings with month-over-month deltas, plus a burn-rate forecast projecting month-end usage against your request budget ("on track to hit budget around the 23rd")
 - **🔧 Copilot Tool Take-up** — Per-workspace count of how often Copilot actually invokes the TokenSlayer LM tools, so you can see whether they're being used
 - **🔵 Workspace Coverage Ring** — SVG circular progress showing analyzed vs total files

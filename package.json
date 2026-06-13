@@ -2,7 +2,7 @@
   "name": "tokenslayer",
   "displayName": "TokenSlayer",
   "description": "Semantic Structural Cache \u2014 Slash LLM token usage by 40-95% with AST-driven code skeletons",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "ajvikram",
   "repository": {
     "type": "git",
