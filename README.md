@@ -1,7 +1,8 @@
 <div align="center">
   <img src="media/icon.png" alt="TokenSlayer" width="128" />
   <h1>⚡ TokenSlayer</h1>
-  <p><strong>Semantic Structural Cache for Any AI Coding Tool</strong><br/>Slash LLM token usage by 40–95% with AST-driven code skeletons — 15 languages, dependency chain analysis, structural patching, BPE-optimized layouts</p>
+  <p><strong>AI Coding Agent Infrastructure for VS Code</strong><br/>
+  Four capabilities in one extension: context compaction · call graph navigation · structural patching · real usage telemetry</p>
 
   [![CI](https://github.com/ajvikram/TokenSlayer/actions/workflows/ci.yml/badge.svg)](https://github.com/ajvikram/TokenSlayer/actions/workflows/ci.yml)
   [![Release](https://github.com/ajvikram/TokenSlayer/actions/workflows/release.yml/badge.svg)](https://github.com/ajvikram/TokenSlayer/actions/workflows/release.yml)
@@ -12,16 +13,23 @@
 
 ---
 
-## The Problem
+## What It Is
 
-AI coding assistants waste **up to 80% of tokens** during the "orientation phase" — reading massive files just to understand where a single function is. Every time Copilot needs context, it reads raw files, consuming thousands of tokens for information that could fit in a few lines.
+TokenSlayer is a VS Code extension (+ standalone MCP server) that gives AI coding agents four things they're currently missing:
+
+| Capability | Tool | What it does |
+|---|---|---|
+| **Context compaction** | `#tokenslayer-structural-summary` | AST-driven skeletons: 1,200 lines → 8-line skeleton, 96% fewer tokens. 15 languages, BPE-aware, dependency chain traversal. |
+| **Call graph navigation** | `#tokenslayer-call-graph` | "What calls X?", "What does X call?", "What breaks if I change X?" — answered via the live VS Code language server, not a text search. Zero setup, always current, resolves overloads correctly. |
+| **Structural patching** | `#tokenslayer-apply-patch` | Edit by node ID, not line number. The model returns 15 tokens of patch; TokenSlayer applies it and returns a unified diff. |
+| **Real usage telemetry** | Dashboard / `llmUsageTracker` | Reads Claude Code session transcripts (`~/.claude/projects/`) and VS Code Copilot chat logs — real billed tokens and requests, by model and month, with month-end burn-rate forecasting. |
 
 ```
 Without TokenSlayer:  1,200 lines of raw code  →  5,000 tokens consumed
 With TokenSlayer:     8-line structural skeleton →    200 tokens consumed (96% reduction)
 ```
 
-**TokenSlayer** fixes this by providing compact AST-driven structural skeletons instead of raw file contents — as a VS Code Language Model Tool for Copilot, and as a standalone MCP server for Cursor, Claude Code, Cline, Continue, Windsurf, and any MCP-compatible client.
+All four capabilities work as native Copilot LM Tools (no prompt required), as MCP server tools for Claude Code / Cursor / Cline / Continue / Windsurf, and via a local REST API on port 4733 for any custom agent.
 
 ---
 
@@ -772,7 +780,47 @@ git push origin v0.1.0
 
 ---
 
+## 📊 Measured on SpendBench
+
+TokenSlayer's savings claims are backed by [SpendBench](https://github.com/ajvikram/spendbench) — an open benchmark that measures real billed tokens (via a local LiteLLM proxy at the API boundary) across identical orientation tasks, N=3 runs each.
+
+**Results on orientation tasks (Claude Code + claude-sonnet-4-6):**
+
+| Task | Config | Tokens (mean) | Cost USD (mean) | vs Baseline |
+|---|---|---|---|---|
+| `orient-express-view-sendfile` | baseline | 114,263 | $0.0768 | — |
+| | **tokenslayer-mcp** | **99,230** | **$0.0558** | **-13% tokens · -27% cost** |
+| | tokenwise-mcp | 106,049 | $0.0578 | -7% tokens · -25% cost |
+| `orient-lodash-baseflatten` | baseline | 160,594 | $0.0761 | — |
+| | **tokenslayer-mcp** | **153,024** | **$0.0771** | **-5% tokens · flat cost** |
+| | tokenwise-mcp | 179,359 | $0.0900 | +12% tokens · +18% cost |
+| `orient-tokenslayer-mcp-entry` | baseline | 98,279 | $0.1237 | — |
+| | **tokenslayer-mcp** | **113,900** | **$0.0908** | +16% tokens · **-27% cost** |
+| | tokenwise-mcp | 107,411 | $0.0835 | +9% tokens · **-33% cost** |
+
+*Prices pinned to 2026-06-11. Cache reads billed at ~0.1× input rate, which is why cost and token count can diverge.*
+
+The results are task-dependent and intentionally unfiltered — this is what a credible benchmark looks like. SpendBench is open source: runner, raw transcripts, per-task JSONs, and exact prompts are all public. PRs adding other tools or tasks are welcome.
+
+---
+
 ## 🤔 How It Compares
+
+**vs Graphify** (63k stars, knowledge graph for codebases):
+
+| | TokenSlayer | Graphify |
+|---|---|---|
+| Call graph / "what calls X" | ✅ via VS Code call hierarchy (live, always current) | ✅ via pre-built knowledge graph |
+| Setup required | ✅ Zero — auto-analyzes on open/save | ⚠️ Build graph first |
+| Cross-file relationships | ✅ `analyze_dependency_chain` + call graph | ✅ |
+| Secrets detection | ✅ | ❌ |
+| External agent API | ✅ Port 4733 REST + MCP server | ❌ |
+| Real usage telemetry | ✅ Claude Code transcripts + Copilot logs | ❌ |
+| Languages | 15 | 33 (tree-sitter) |
+
+They're complementary, not competing: Graphify for whole-codebase graph queries; TokenSlayer for file content compaction, live call graph, usage tracking, and structural patching. Both can run together.
+
+**vs raw file reading:**
 
 | Approach | API Calls/File | Token Cost | Latency |
 |---|---|---|---|
