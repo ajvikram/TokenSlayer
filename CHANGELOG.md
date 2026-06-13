@@ -5,6 +5,22 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## MCP server [1.3.0] — 2026-06-13
+
+### Added
+
+- **Low-yield skeleton detection.** Bundled, minified, or IIFE/closure-wrapped
+  files (e.g. `lodash.js`, an esbuild bundle) trap their real symbols inside a
+  collapsed body, so the structural skeleton drops them while still reporting a
+  huge reduction %. The analyze tools now detect this — a large file whose
+  skeleton is suspiciously sparse (< 12 skeleton-lines per 1000 source lines;
+  calibrated on real files: collapsed ≈7–8, conventional ≥23) is marked
+  `lowYield`, and the output appends a warning telling the caller to grep / read
+  targeted ranges instead of trusting the husk. Prevents a confident but empty
+  skeleton from masquerading as a 99% saving. (Extension LSP-path equivalent is
+  a follow-up — the language server reports nested symbols differently and needs
+  in-editor validation.)
+
 ## [1.3.0] — 2026-06-12
 
 ### Added

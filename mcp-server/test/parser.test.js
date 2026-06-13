@@ -58,6 +58,36 @@ describe('getLanguage', () => {
   });
 });
 
+// ---- low-yield detection (IIFE/bundled collapse) ---------------------------
+
+describe('analyzeFile — low-yield skeleton detection', () => {
+  test('flags a large IIFE-wrapped file whose symbols collapse', () => {
+    // Everything lives inside one top-level function, like lodash. The skeleton
+    // collapses that body, so a 600-line file yields a near-empty skeleton.
+    const inner = Array.from({ length: 600 }, (_, i) =>
+      `  function helper${i}(a, b) { return a + b + ${i}; }`).join('\n');
+    const content = `var lib = (function () {\n${inner}\n  return {};\n})();\n`;
+    const r = analyze('bundle.js', content);
+    assert.equal(r.error, undefined);
+    assert.equal(r.lowYield, true, 'collapsed IIFE should be low-yield');
+  });
+
+  test('does NOT flag a large conventionally-structured file', () => {
+    // Top-level functions are real symbols the skeleton keeps — high density.
+    const content = Array.from({ length: 500 }, (_, i) =>
+      `export function feature${i}(input) {\n  const x = input * ${i};\n  return x;\n}`).join('\n\n');
+    const r = analyze('conventional.ts', content);
+    assert.equal(r.error, undefined);
+    assert.equal(r.lowYield ?? false, false, 'top-level symbols should not trip the guard');
+  });
+
+  test('does NOT flag small files (gated by line count)', () => {
+    const content = `var m = (function () {\n  function a() {}\n  return {};\n})();\n`;
+    const r = analyze('small.js', content);
+    assert.equal(r.lowYield ?? false, false, 'small files are exempt');
+  });
+});
+
 // ---- analyzeFile error paths ----------------------------------------------
 
 describe('analyzeFile — error paths', () => {
