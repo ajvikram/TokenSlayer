@@ -106,6 +106,40 @@ export interface ExcludedFile {
   timestamp: number;
 }
 
+// ─── Context Rot Score + Model Recommendation ───────────────────────────────
+
+export interface RotSignals {
+  turnCount: number;
+  depthScore: number;       // 0–100
+  redundancyScore: number;  // 0–100
+  growthScore: number;      // 0–100
+  entropyScore: number;     // 0–100
+  verbosityScore: number;   // 0–100
+}
+
+export type TaskComplexity = 'simple' | 'moderate' | 'complex';
+export type RotSeverity = 'healthy' | 'amber' | 'critical';
+
+export interface ModelRecommendation {
+  model: string;               // e.g. "claude-sonnet-4-6"
+  displayName: string;         // e.g. "Claude Sonnet 4.6"
+  action: 'continue' | 'switch' | 'start_fresh';
+  reason: string;
+  estimatedCostPerTurn: number; // USD
+}
+
+export interface SessionHealth {
+  rotScore: number;            // 0–100 composite
+  severity: RotSeverity;
+  signals: RotSignals;
+  recommendation: ModelRecommendation;
+  sessionId: string;           // transcript filename stem
+  turnCount: number;
+  totalTokens: number;
+  currentModel: string;
+  updatedAt: number;           // epoch ms
+}
+
 // ─── Symbol Kind Helpers ────────────────────────────────────────────────────
 
 export function symbolKindToLabel(kind: vscode.SymbolKind): string {
