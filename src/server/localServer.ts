@@ -3,6 +3,8 @@ import * as url from 'url';
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
 import { StructuralSummaryTool } from '../tools/structuralSummaryTool';
+import { ContextRotAnalyzer } from '../health/contextRotAnalyzer';
+import { RotScoreEngine } from '../health/rotScoreEngine';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -53,8 +55,10 @@ export class LocalServer {
           await this.handleAnalyze(parsedUrl.query, res);
         } else if (pathname === '/stats') {
           this.handleStats(res);
+        } else if (pathname === '/session-health') {
+          this.handleSessionHealth(parsedUrl.query, res);
         } else {
-          this.sendError(res, 404, 'Endpoint not found. Available: /analyze, /stats');
+          this.sendError(res, 404, 'Endpoint not found. Available: /analyze, /stats, /session-health');
         }
       } catch (error) {
         logger.error(`API Error on ${pathname}`, error);
@@ -155,6 +159,47 @@ export class LocalServer {
       totalSaved: savings.totalSaved,
       filesAnalyzed: savings.filesAnalyzed,
       reductionPercent: savings.reductionPercent
+    }));
+  }
+
+  /**
+   * Handle GET /session-health?workspaceRoot=/abs/path
+   *
+   * Falls back to the first VS Code workspace folder if workspaceRoot is omitted.
+   * Pure Node.js — no VS Code API needed, so this also works from the MCP server.
+   */
+  private handleSessionHealth(query: NodeJS.Dict<string | string[]>, res: http.ServerResponse): void {
+    const workspaceRoot =
+      (typeof query.workspaceRoot === 'string' ? query.workspaceRoot : null) ??
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    if (!workspaceRoot) {
+      this.sendError(res, 400, 'No workspaceRoot provided and no VS Code workspace open');
+      return;
+    }
+
+    const analyzer = new ContextRotAnalyzer();
+    const engine   = new RotScoreEngine();
+
+    const result = analyzer.analyze(workspaceRoot);
+    if (!result) {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        success: true,
+        available: false,
+        message: 'No active Claude Code session found for this workspace',
+        workspaceRoot,
+      }));
+      return;
+    }
+
+    const health = engine.compute(result);
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      success: true,
+      available: true,
+      workspaceRoot,
+      health,
     }));
   }
 
