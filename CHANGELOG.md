@@ -64,6 +64,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency chain analysis, structural patching, secrets detection, usage
   tracking, tool invocation tracking) are stable and tested.
 
+## [1.4.0] — 2026-06-12
+
+### Added
+
+- **GitHub Copilot request counts — monthly and total.** The dashboard
+  previously showed request counts only for Claude Code (parsed from its
+  transcripts); Copilot requests were invisible. A new `CopilotUsageTracker`
+  parses the chat-session logs VS Code persists under
+  `workspaceStorage/<hash>/chatSessions/` — including the op-log `.jsonl`
+  format (kind-0 snapshot, kind-1 set-ops, kind-2 array-appends; new requests
+  arrive as kind-2 appends) and legacy `.json` sessions — and reports requests
+  per calendar month, per model, and all-time for the current workspace.
+  Surfaced in the Monthly tab (new Copilot column + summary card with all-time
+  total), the combined Requests card, the budget bar, the month-end forecast,
+  and the CSV export (`copilot_requests`, `copilot_models` columns). Works for
+  VS Code, Insiders, and VSCodium storage locations. Note: this is a local
+  count of chat/agent requests made from this machine and workspace — not
+  GitHub's billed premium-request meter (no model multipliers, no other
+  devices, no inline completions).
+
 ## [0.7.0] — 2026-06-12
 
 ### Added

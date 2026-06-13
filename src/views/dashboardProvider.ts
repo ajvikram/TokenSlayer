@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { CacheManager } from '../cache/cacheManager';
+import { CopilotUsageTracker } from '../usage/copilotUsageTracker';
 import { LlmUsageTracker, monthKey } from '../usage/llmUsageTracker';
 import { ToolInvocationTracker } from '../usage/toolInvocationTracker';
 import { projectMonthEnd } from '../usage/forecast';
@@ -17,6 +18,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'tokenslayer.dashboardView';
   private view?: vscode.WebviewView;
   private llmUsageTracker = new LlmUsageTracker();
+  private copilotUsageTracker = new CopilotUsageTracker();
 
   constructor(
     private extensionUri: vscode.Uri,
@@ -99,12 +101,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
     // Real LLM usage for this workspace, read from Claude Code transcripts.
     let llmUsage = null;
+    let copilotUsage = null;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (workspaceRoot) {
       try {
         llmUsage = this.llmUsageTracker.getUsage(workspaceRoot);
       } catch (err) {
         logger.warn('Failed to read LLM usage from transcripts', err);
+      }
+      try {
+        copilotUsage = this.copilotUsageTracker.getUsage(workspaceRoot);
+      } catch (err) {
+        logger.warn('Failed to read Copilot usage from chat sessions', err);
       }
     }
 
@@ -124,11 +132,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       timeline,
       analyzedFileCount,
       llmUsage,
+      copilotUsage,
       toolInvocations: this.toolTracker?.get() ?? {},
       toolInvocationsByMonth: this.toolTracker?.getByMonth() ?? {},
       compactionByMonth: this.cacheManager.getCompactionByMonth(),
       monthlyRequestBudget: monthlyBudget,
-      forecast: this.computeForecast(llmUsage, monthlyBudget),
+      forecast: this.computeForecast(llmUsage, copilotUsage, monthlyBudget),
     });
   }
 
@@ -139,14 +148,17 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
    */
   private computeForecast(
     llmUsage: ReturnType<LlmUsageTracker['getUsage']> | null,
+    copilotUsage: ReturnType<CopilotUsageTracker['getUsage']> | null,
     monthlyBudget: number
   ): ReturnType<typeof projectMonthEnd> | null {
     const nowKey = monthKey(Date.now());
     const llmRequests =
       llmUsage?.byMonth?.find((m) => m.month === nowKey)?.requests ?? 0;
+    const copilotRequests =
+      copilotUsage?.byMonth?.find((m) => m.month === nowKey)?.requests ?? 0;
     const toolCounts = this.toolTracker?.getByMonth()?.[nowKey] ?? {};
     const toolCalls = Object.values(toolCounts).reduce((s, n) => s + n, 0);
-    const used = llmRequests + toolCalls;
+    const used = llmRequests + copilotRequests + toolCalls;
     if (used === 0) { return null; }
     return projectMonthEnd(used, new Date(), monthlyBudget);
   }
@@ -154,16 +166,23 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   private exportMonthlyCsv(): void {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     let llmUsage = null;
+    let copilotUsage = null;
     if (workspaceRoot) {
       try {
         llmUsage = this.llmUsageTracker.getUsage(workspaceRoot);
       } catch (err) {
         logger.warn('Failed to read LLM usage for CSV export', err);
       }
+      try {
+        copilotUsage = this.copilotUsageTracker.getUsage(workspaceRoot);
+      } catch (err) {
+        logger.warn('Failed to read Copilot usage for CSV export', err);
+      }
     }
 
     const csv = this.buildMonthlyCsv(
       llmUsage,
+      copilotUsage,
       this.toolTracker?.getByMonth() ?? {},
       this.cacheManager.getCompactionByMonth()
     );
@@ -182,6 +201,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
   private buildMonthlyCsv(
     llm: ReturnType<LlmUsageTracker['getUsage']> | null,
+    copilot: ReturnType<CopilotUsageTracker['getUsage']> | null,
     toolsByMonth: Record<string, Record<string, number>>,
     compactionByMonth: Record<string, { tokensSaved: number; analyses: number }>
   ): string {
@@ -190,6 +210,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       llmInput?: number;
       llmOutput?: number;
       llmRequests?: number;
+      copilotRequests?: number;
+      copilotModels?: string;
       models?: string;
       toolCalls?: number;
       tokensSaved?: number;
@@ -204,6 +226,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         months[m.month].llmOutput = m.outputTokens;
         months[m.month].llmRequests = m.requests;
         months[m.month].models = m.models.map(x => x.model).join('; ');
+      }
+    }
+    if (copilot?.byMonth) {
+      for (const m of copilot.byMonth) {
+        months[m.month] = months[m.month] ?? {};
+        months[m.month].copilotRequests = m.requests;
+        months[m.month].copilotModels = m.models.map(x => x.model).join('; ');
       }
     }
     for (const mk of Object.keys(toolsByMonth)) {
@@ -224,6 +253,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       'llm_input',
       'llm_output',
       'llm_requests',
+      'copilot_requests',
+      'copilot_models',
       'models',
       'tool_calls',
       'combined_requests',
@@ -236,7 +267,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     const rows = keys.map((k, i) => {
       const m = months[k];
       const prev = i + 1 < keys.length ? months[keys[i + 1]] : undefined;
-      const combined = (m.llmRequests ?? 0) + (m.toolCalls ?? 0);
+      const combined = (m.llmRequests ?? 0) + (m.copilotRequests ?? 0) + (m.toolCalls ?? 0);
       const momLlm = prev && m.llmTokens != null && prev.llmTokens != null
         ? m.llmTokens - prev.llmTokens
         : '';
@@ -249,6 +280,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         m.llmInput ?? '',
         m.llmOutput ?? '',
         m.llmRequests ?? '',
+        m.copilotRequests ?? '',
+        m.copilotModels ? `"${m.copilotModels.replace(/"/g, '""')}"` : '',
         m.models ? `"${m.models.replace(/"/g, '""')}"` : '',
         m.toolCalls ?? '',
         combined || '',
@@ -483,6 +516,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
               <tr>
                 <th>Month</th>
                 <th class="num">Requests</th>
+                <th class="num">Copilot</th>
                 <th class="num">LLM Tokens</th>
                 <th class="num">In / Out</th>
                 <th>Models</th>
@@ -740,6 +774,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         // Monthly usage (LLM tokens + tool calls per calendar month)
         renderMonthlyUsage(
           llm,
+          message.copilotUsage,
           message.toolInvocationsByMonth || {},
           message.compactionByMonth || {},
           message.monthlyRequestBudget || 0
@@ -878,7 +913,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     }
 
     // Merge LLM usage months and tool-call months into one newest-first list.
-    function renderMonthlyUsage(llm, toolsByMonth, compactionByMonth, monthlyBudget) {
+    function renderMonthlyUsage(llm, copilot, toolsByMonth, compactionByMonth, monthlyBudget) {
       var summaryEl = document.getElementById('monthlySummaryCards');
       var tableWrap = document.getElementById('monthlyTableWrap');
       var tableBody = document.getElementById('monthlyTableBody');
@@ -895,6 +930,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           months[m.month].output = m.outputTokens;
           months[m.month].requests = m.requests;
           months[m.month].models = m.models || [];
+        });
+      }
+      if (copilot && copilot.available && copilot.byMonth) {
+        copilot.byMonth.forEach(function(m) {
+          months[m.month] = months[m.month] || {};
+          months[m.month].copilotRequests = m.requests;
+          months[m.month].copilotModels = m.models || [];
         });
       }
       Object.keys(toolsByMonth).forEach(function(mk) {
@@ -924,13 +966,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
       var nowKey = currentMonthKey();
       var cur = months[nowKey] || {};
-      var combinedReq = (cur.requests || 0) + (cur.toolCalls || 0);
+      var combinedReq = (cur.requests || 0) + (cur.copilotRequests || 0) + (cur.toolCalls || 0);
       currentLabelEl.textContent = combinedReq
         ? (combinedReq + ' req this month')
         : '';
 
       summaryEl.innerHTML = [
-        { label: 'Requests', value: combinedReq || '0', sub: (cur.requests || 0) + ' LLM · ' + (cur.toolCalls || 0) + ' tools' },
+        { label: 'Requests', value: combinedReq || '0', sub: (cur.requests || 0) + ' Claude · ' + (cur.copilotRequests || 0) + ' Copilot · ' + (cur.toolCalls || 0) + ' tools' },
+        { label: 'Copilot Req', value: cur.copilotRequests || '0', sub: (copilot && copilot.available ? (copilot.totalRequests || 0) + ' all-time · ' + (copilot.sessionCount || 0) + ' sessions' : 'no chat sessions found') },
         { label: 'LLM Tokens', value: cur.tokens ? compactNum(cur.tokens) : '0', sub: cur.input ? compactNum(cur.input) + ' in · ' + compactNum(cur.output) + ' out' : 'Claude Code' },
         { label: 'Models', value: cur.models && cur.models.length ? cur.models.length : '0', sub: cur.models && cur.models.length ? shortModelName(cur.models[0].model) : 'none yet' },
         { label: 'Tokens Saved', value: cur.saved ? compactNum(cur.saved) : '0', sub: (cur.analyses || 0) + ' analyses' },
@@ -959,7 +1002,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         var prevKey = keys[idx + 1];
         var prev = prevKey ? months[prevKey] : null;
         var isCurrent = k === nowKey;
-        var reqTotal = (m.requests || 0) + (m.toolCalls || 0);
+        var reqTotal = (m.requests || 0) + (m.copilotRequests || 0) + (m.toolCalls || 0);
         var momParts = [];
         if (m.tokens != null && prev && prev.tokens != null) {
           momParts.push(formatMomDelta(m.tokens, prev.tokens) + ' tok');
@@ -970,6 +1013,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         return '<tr class="' + (isCurrent ? 'month-row-current' : '') + '">'
           + '<td><strong>' + monthLabel(k) + '</strong>' + (isCurrent ? ' <span class="month-badge">current</span>' : '') + '</td>'
           + '<td class="num">' + (reqTotal || '—') + '</td>'
+          + '<td class="num"' + (m.copilotModels && m.copilotModels.length ? ' title="' + escapeHtml(m.copilotModels.map(function(x) { return x.model + ' ×' + x.requests; }).join(', ')) + '"' : '') + '>' + (m.copilotRequests || '—') + '</td>'
           + '<td class="num">' + (m.tokens ? compactNum(m.tokens) : '—') + '</td>'
           + '<td class="num">' + (m.input ? compactNum(m.input) + ' / ' + compactNum(m.output) : '—') + '</td>'
           + '<td class="models-cell" title="' + escapeHtml((m.models || []).map(function(x) { return x.model; }).join(', ')) + '">' + escapeHtml(formatModelsList(m.models)) + '</td>'
