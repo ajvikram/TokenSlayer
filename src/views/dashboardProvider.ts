@@ -5,6 +5,8 @@ import { CopilotUsageTracker } from '../usage/copilotUsageTracker';
 import { LlmUsageTracker, monthKey } from '../usage/llmUsageTracker';
 import { ToolInvocationTracker } from '../usage/toolInvocationTracker';
 import { projectMonthEnd } from '../usage/forecast';
+import { renderSessionHealthHtml } from '../health/sessionHealthProvider';
+import { SessionHealth } from '../types';
 import { Logger } from '../utils/logger';
 
 const logger = Logger.getInstance();
@@ -80,6 +82,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     // Clean up interval when view is disposed
     webviewView.onDidDispose(() => {
       clearInterval(autoRefreshInterval);
+    });
+  }
+
+  /**
+   * Push a new SessionHealth snapshot to the webview.
+   * Called by SessionHealthProvider via the onHealthChanged event.
+   */
+  public updateSessionHealth(health: SessionHealth): void {
+    if (!this.view) { return; }
+    this.view.webview.postMessage({
+      type: 'update-session-health',
+      html: renderSessionHealthHtml(health),
     });
   }
 
@@ -331,6 +345,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     <div class="tab-bar">
       <button class="tab active" data-tab="overview" type="button">Overview</button>
       <button class="tab" data-tab="monthly" type="button">📅 Monthly</button>
+      <button class="tab" data-tab="health" type="button">🩺 Health</button>
     </div>
 
     <div id="tabOverview" class="tab-panel active">
@@ -544,6 +559,12 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         <button class="btn btn-export btn-small" id="exportMonthlyBtn" style="margin-top:8px;">📥 Export CSV</button>
       </div>
     </div><!-- /tabMonthly -->
+
+    <div id="tabHealth" class="tab-panel">
+      <div id="sessionHealthContent">
+        <div class="empty-state-small">No active Claude Code session detected.</div>
+      </div>
+    </div><!-- /tabHealth -->
 
     <!-- Actions -->
     <div class="actions">
@@ -1078,6 +1099,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       return n + (s[(v - 20) % 10] || s[v] || s[0]);
     }
 
+    // Session health updates
+    window.addEventListener('message', function(event) {
+      var msg = event.data;
+      if (msg.type === 'update-session-health') {
+        var el = document.getElementById('sessionHealthContent');
+        if (el) { el.innerHTML = msg.html; }
+      }
+    });
+
     // Tab switching
     var activeTab = 'overview';
     document.querySelectorAll('.tab-bar .tab').forEach(function(btn) {
@@ -1088,6 +1118,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         });
         document.getElementById('tabOverview').classList.toggle('active', activeTab === 'overview');
         document.getElementById('tabMonthly').classList.toggle('active', activeTab === 'monthly');
+        document.getElementById('tabHealth').classList.toggle('active', activeTab === 'health');
       });
     });
 

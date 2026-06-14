@@ -5,6 +5,31 @@ All notable changes to TokenSlayer are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-06-13
+
+### Context Rot Score — now a real "getting dumber over time" meter
+
+- **Trajectory view.** The Health tab now shows the rot score *as of each turn*
+  as an inline sparkline, with the turn where it first crossed into amber
+  marked. The trajectory is reconstructed deterministically from the transcript
+  (replaying the signals on growing turn-prefixes) — no cross-poll state. A
+  trend indicator (▲ rising / ◆ stable / ▼ improving) appears on the score and
+  in the status bar.
+- **Scoring reworked so length ≠ rot.** Turn depth was the dominant signal (30%)
+  but is just a turn counter, so a long-but-clean session scored like a rotted
+  one. Depth is now a 20% baseline; the genuine degradation signals — redundant
+  reads and per-turn token growth — carry 25% each. ("Tool entropy" was also
+  renamed to **"Tool looping"** — it measures repetition, the opposite of what
+  "entropy" implies.)
+- **Recommendation cost is now correct.** The model-switch estimate used a
+  hardcoded ~8k tokens/turn regardless of the actual session, understating real
+  cost several-fold on large sessions. It now uses the session's measured
+  tokens/turn. Also fixed the "$0.64¢/turn" unit bug (mixed $ and ¢).
+- **Remediation tied to the cause.** A new "What's driving it" card names the
+  dominant signal and the specific fix — e.g. redundant reads →
+  use `#tokenslayer-structural-summary` instead of re-reading; high depth/growth
+  → `/compact` or a fresh session.
+
 ## MCP server [1.3.0] — 2026-06-13
 
 ### Added

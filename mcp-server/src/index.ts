@@ -33,6 +33,8 @@ import {
 import { startDashboard } from "./dashboard.js";
 import * as fs from 'fs';
 import * as path from 'path';
+import { ContextRotAnalyzer } from './health/contextRotAnalyzer.js';
+import { RotScoreEngine } from './health/rotScoreEngine.js';
 
 /**
  * TokenSlayer Standalone MCP Server
@@ -232,6 +234,28 @@ class TokenSlayerServer {
           }
         },
         {
+          name: "session_health",
+          description: "Return the Context Rot Score and model recommendation for the active Claude Code session in the given workspace. " +
+            "Rot score 0–100: ≥65 = critical (start fresh), 35–64 = amber (consider switching), <35 = healthy. " +
+            "Also returns which model to use next (Haiku/Sonnet/Opus) with a reason and estimated cost per turn. " +
+            "Call this when the user asks 'how healthy is my session', 'should I start fresh', 'which model should I use', or 'what is my context rot score'.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspaceRoot: {
+                type: "string",
+                description: "Absolute path to the workspace root (the directory Claude Code was opened in). " +
+                  "Used to locate the matching Claude Code transcript under ~/.claude/projects/."
+              },
+              claudeHome: {
+                type: "string",
+                description: "Optional. Override the Claude home directory (default: ~/.claude)."
+              }
+            },
+            required: ["workspaceRoot"]
+          }
+        },
+        {
           name: "get_stats",
           description: "Return cumulative TokenSlayer savings statistics across all MCP calls (total tokens saved, cost estimate, reduction %, language breakdown, timeline, top files).",
           inputSchema: {
@@ -424,6 +448,51 @@ class TokenSlayerServer {
         }).join('\n\n---\n\n');
 
         return { content: [{ type: "text", text: output }] };
+      }
+
+      if (request.params.name === "session_health") {
+        const workspaceRoot = args.workspaceRoot as string;
+        if (!workspaceRoot) { throw new Error("workspaceRoot is required"); }
+        const claudeHome = args.claudeHome as string | undefined;
+
+        const analyzer = new ContextRotAnalyzer();
+        const engine   = new RotScoreEngine();
+        const result   = analyzer.analyze(workspaceRoot, claudeHome);
+
+        if (!result) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                available: false,
+                message: "No active Claude Code session found for this workspace. " +
+                  "Start or resume a Claude Code session in " + workspaceRoot + " first.",
+                workspaceRoot,
+              }, null, 2)
+            }]
+          };
+        }
+
+        const health = engine.compute(result);
+        const icon = health.severity === 'critical' ? '🔴' : health.severity === 'amber' ? '🟡' : '🟢';
+        const summary =
+          `${icon} Context Rot Score: ${health.rotScore}/100 (${health.severity.toUpperCase()})\n` +
+          `Model recommendation: ${health.recommendation.action === 'start_fresh' ? '⚠️ Start fresh session' : health.recommendation.displayName} — ${health.recommendation.reason}\n` +
+          `Est. cost: ~$${(health.recommendation.estimatedCostPerTurn * 100).toFixed(2)}¢/turn\n\n` +
+          `Signal breakdown:\n` +
+          `  Turn depth      ${health.signals.depthScore.toString().padStart(3)}  (weight 30%)\n` +
+          `  Redundant reads ${health.signals.redundancyScore.toString().padStart(3)}  (weight 25%)\n` +
+          `  Token growth    ${health.signals.growthScore.toString().padStart(3)}  (weight 20%)\n` +
+          `  Tool entropy    ${health.signals.entropyScore.toString().padStart(3)}  (weight 15%)\n` +
+          `  Verbosity       ${health.signals.verbosityScore.toString().padStart(3)}  (weight 10%)\n\n` +
+          `Session: ${health.turnCount} turns · ${health.totalTokens.toLocaleString()} tokens · model: ${health.currentModel}`;
+
+        return {
+          content: [{
+            type: "text",
+            text: summary + "\n\n" + JSON.stringify({ available: true, health }, null, 2)
+          }]
+        };
       }
 
       if (request.params.name === "get_stats") {

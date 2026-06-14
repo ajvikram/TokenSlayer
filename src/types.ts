@@ -106,6 +106,61 @@ export interface ExcludedFile {
   timestamp: number;
 }
 
+// ─── Context Rot Score + Model Recommendation ───────────────────────────────
+
+export interface RotSignals {
+  turnCount: number;
+  depthScore: number;       // 0–100
+  redundancyScore: number;  // 0–100
+  growthScore: number;      // 0–100
+  loopingScore: number;     // 0–100 — repeated/low-diversity tool use (was "entropy")
+  verbosityScore: number;   // 0–100
+}
+
+export type TaskComplexity = 'simple' | 'moderate' | 'complex';
+export type RotSeverity = 'healthy' | 'amber' | 'critical';
+
+export interface ModelRecommendation {
+  model: string;               // e.g. "claude-sonnet-4-6"
+  displayName: string;         // e.g. "Claude Sonnet 4.6"
+  action: 'continue' | 'switch' | 'start_fresh';
+  reason: string;
+  estimatedCostPerTurn: number; // USD — based on this session's measured tokens/turn
+}
+
+/** One point on the rot-score trajectory, computed as-of turn N. */
+export interface RotScorePoint {
+  turn: number;
+  score: number;
+}
+
+export type RotTrend = 'rising' | 'stable' | 'falling';
+
+/** The signal contributing most to the current score, plus a concrete fix. */
+export interface RotDriver {
+  signal: string;   // human label, e.g. "Redundant reads"
+  hint: string;     // specific remediation
+}
+
+export interface SessionHealth {
+  rotScore: number;            // 0–100 composite
+  severity: RotSeverity;
+  signals: RotSignals;
+  recommendation: ModelRecommendation;
+  /** Score as-of each turn, reconstructed from the transcript (oldest→newest). */
+  history: RotScorePoint[];
+  trend: RotTrend;
+  /** First turn whose score crossed into amber (>=35), or null if never. */
+  amberCrossedTurn: number | null;
+  /** Dominant weighted signal driving the score + how to fix it. */
+  primaryDriver: RotDriver;
+  sessionId: string;           // transcript filename stem
+  turnCount: number;
+  totalTokens: number;
+  currentModel: string;
+  updatedAt: number;           // epoch ms
+}
+
 // ─── Symbol Kind Helpers ────────────────────────────────────────────────────
 
 export function symbolKindToLabel(kind: vscode.SymbolKind): string {

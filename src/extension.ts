@@ -20,6 +20,7 @@ import { buildDependencyChain } from './utils/importResolver';
 import { applyPatches, Patch } from './utils/structuralPatch';
 import { Logger } from './utils/logger';
 import { ToolInvocationTracker, withTakeup } from './usage/toolInvocationTracker';
+import { SessionHealthProvider } from './health/sessionHealthProvider';
 import { Verbosity } from './types';
 
 const logger = Logger.getInstance();
@@ -28,6 +29,7 @@ let statusBarItem: vscode.StatusBarItem;
 let cacheManager: CacheManager;
 let dashboardProvider: DashboardProvider;
 let localServer: LocalServer;
+let sessionHealthProvider: SessionHealthProvider | undefined;
 
 /**
  * Extension activation entry point.
@@ -585,6 +587,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   updateStatusBar(cacheManager.getSavings().totalSaved);
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
+
+  // ─── 8b. Session Health Provider (Context Rot Score) ─────────────────
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (workspaceFolder) {
+    sessionHealthProvider = new SessionHealthProvider(workspaceFolder.uri.fsPath);
+    sessionHealthProvider.start();
+    context.subscriptions.push(sessionHealthProvider);
+
+    // Forward health updates to the dashboard webview if it's open
+    sessionHealthProvider.onHealthChanged(health => {
+      dashboardProvider.updateSessionHealth(health);
+    });
+  }
 
   // ─── 9. Auto-persist cache periodically ──────────────────────────────
   const persistInterval = setInterval(() => {
