@@ -13,7 +13,7 @@ import { claudeProjectDir } from '../usage/llmUsageTracker';
  * append-only), so 10s polling stays cheap even on large sessions.
  */
 
-interface TurnRecord {
+export interface TurnRecord {
   /** Epoch ms from the transcript timestamp field. */
   timestamp: number;
   inputTokens: number;
@@ -188,14 +188,16 @@ export function computeRotSignals(turns: TurnRecord[]): RotSignals {
     growthScore = Math.min(100, Math.round(Math.max(0, rate - 1.0) * 50));
   }
 
-  // Signal 4: Tool call entropy (weight 15%)
-  // Low diversity = looping. Perfect diversity = 0 rot contribution.
+  // Signal 4: Tool looping (weight 15%)
+  // Low tool diversity = the agent is repeating the same calls (often a sign of
+  // being stuck). High value = high repetition = more rot. (Named "looping",
+  // not "entropy": high entropy would mean high *diversity*, i.e. healthy — the
+  // opposite of what this measures.)
   const allTools = turns.flatMap(t => t.toolCalls);
-  let entropyScore = 0;
+  let loopingScore = 0;
   if (allTools.length > 0) {
     const uniqueTools = new Set(allTools).size;
-    // ratio of unique to total — low ratio = high entropy score
-    entropyScore = Math.min(100, Math.round(
+    loopingScore = Math.min(100, Math.round(
       Math.max(0, 1 - (uniqueTools / allTools.length)) * 100
     ));
   }
@@ -213,7 +215,7 @@ export function computeRotSignals(turns: TurnRecord[]): RotSignals {
     depthScore,
     redundancyScore,
     growthScore,
-    entropyScore,
+    loopingScore,
     verbosityScore,
   };
 }
@@ -252,6 +254,8 @@ export interface AnalysisResult {
   currentModel: string;
   totalTokens: number;
   sessionFile: string;
+  /** All parsed turns (oldest→newest) so the engine can replay the trajectory. */
+  turns: TurnRecord[];
 }
 
 export class ContextRotAnalyzer {
@@ -269,6 +273,6 @@ export class ContextRotAnalyzer {
       (s, t) => s + t.inputTokens + t.outputTokens, 0
     );
 
-    return { signals, complexity, currentModel, totalTokens, sessionFile: path.basename(sessionFile) };
+    return { signals, complexity, currentModel, totalTokens, sessionFile: path.basename(sessionFile), turns };
   }
 }

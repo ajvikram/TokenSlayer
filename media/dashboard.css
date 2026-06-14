@@ -882,3 +882,28 @@ body {
   white-space: nowrap;
   font-size: 9px;
 }
+
+/* ── Session Health: trajectory, trend, driver (v1.5.0) ───────────────── */
+.health-trend { font-size: 11px; margin-left: 8px; font-weight: 600; }
+.trend-rising  { color: #ff6b6b; }
+.trend-falling { color: #6bcb77; }
+.trend-stable  { color: var(--vscode-descriptionForeground, #888); }
+
+.health-trajectory { margin: 12px 0; }
+.trajectory-svg {
+  width: 100%;
+  height: 48px;
+  display: block;
+  background: var(--vscode-editor-background, rgba(255,255,255,0.02));
+  border-radius: 4px;
+}
+.trajectory-caption { font-size: 10px; margin-top: 2px; }
+
+.driver-card {
+  padding: 8px 10px;
+  border-left: 3px solid #ffd93d;
+  background: rgba(255, 217, 61, 0.06);
+  border-radius: 3px;
+}
+.driver-signal { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+.driver-hint { font-size: 11px; opacity: 0.85; line-height: 1.4; }

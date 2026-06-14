@@ -113,7 +113,7 @@ export interface RotSignals {
   depthScore: number;       // 0–100
   redundancyScore: number;  // 0–100
   growthScore: number;      // 0–100
-  entropyScore: number;     // 0–100
+  loopingScore: number;     // 0–100 — repeated/low-diversity tool use (was "entropy")
   verbosityScore: number;   // 0–100
 }
 
@@ -125,7 +125,21 @@ export interface ModelRecommendation {
   displayName: string;         // e.g. "Claude Sonnet 4.6"
   action: 'continue' | 'switch' | 'start_fresh';
   reason: string;
-  estimatedCostPerTurn: number; // USD
+  estimatedCostPerTurn: number; // USD — based on this session's measured tokens/turn
+}
+
+/** One point on the rot-score trajectory, computed as-of turn N. */
+export interface RotScorePoint {
+  turn: number;
+  score: number;
+}
+
+export type RotTrend = 'rising' | 'stable' | 'falling';
+
+/** The signal contributing most to the current score, plus a concrete fix. */
+export interface RotDriver {
+  signal: string;   // human label, e.g. "Redundant reads"
+  hint: string;     // specific remediation
 }
 
 export interface SessionHealth {
@@ -133,6 +147,13 @@ export interface SessionHealth {
   severity: RotSeverity;
   signals: RotSignals;
   recommendation: ModelRecommendation;
+  /** Score as-of each turn, reconstructed from the transcript (oldest→newest). */
+  history: RotScorePoint[];
+  trend: RotTrend;
+  /** First turn whose score crossed into amber (>=35), or null if never. */
+  amberCrossedTurn: number | null;
+  /** Dominant weighted signal driving the score + how to fix it. */
+  primaryDriver: RotDriver;
   sessionId: string;           // transcript filename stem
   turnCount: number;
   totalTokens: number;

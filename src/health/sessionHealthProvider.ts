@@ -84,7 +84,8 @@ export class SessionHealthProvider implements vscode.Disposable {
         ? ' → New session'
         : ` · ${model}`;
 
-    this.statusBarItem.text        = `${icon} Rot: ${rotScore}%${action}`;
+    const trendArrow = health.trend === 'rising' ? ' ▲' : health.trend === 'falling' ? ' ▼' : '';
+    this.statusBarItem.text        = `${icon} Rot: ${rotScore}%${trendArrow}${action}`;
     this.statusBarItem.color       = severityColor(severity);
     this.statusBarItem.backgroundColor = severity === 'critical'
       ? new vscode.ThemeColor('statusBarItem.warningBackground')
@@ -144,25 +145,26 @@ export function renderSessionHealthHtml(health: SessionHealth | null): string {
     </div>`;
   }
 
-  const { rotScore, severity, signals, recommendation, turnCount, totalTokens, currentModel, updatedAt } = health;
+  const { rotScore, severity, signals, recommendation, turnCount, totalTokens,
+          currentModel, updatedAt, history, trend, amberCrossedTurn, primaryDriver } = health;
   const secsAgo = Math.round((Date.now() - updatedAt) / 1000);
   const severityLabel = severity === 'critical' ? 'CRITICAL' : severity === 'amber' ? 'AMBER' : 'HEALTHY';
-  const barColor = severity === 'critical' ? '#ff6b6b' : severity === 'amber' ? '#ffd93d' : '#6bcb77';
+  const barColor = severityHex(severity);
 
+  // Display weights mirror WEIGHTS in rotScoreEngine (kept in sync intentionally).
   const signalRows = [
-    { label: 'Turn depth',       score: signals.depthScore,       weight: 30 },
+    { label: 'Turn depth',       score: signals.depthScore,       weight: 20 },
     { label: 'Redundant reads',  score: signals.redundancyScore,  weight: 25 },
-    { label: 'Token growth',     score: signals.growthScore,      weight: 20 },
-    { label: 'Tool entropy',     score: signals.entropyScore,     weight: 15 },
-    { label: 'Output verbosity', score: signals.verbosityScore,   weight: 10 },
+    { label: 'Token growth',     score: signals.growthScore,      weight: 25 },
+    { label: 'Tool looping',     score: signals.loopingScore,     weight: 15 },
+    { label: 'Output verbosity', score: signals.verbosityScore,   weight: 15 },
   ].map(({ label, score, weight }) => {
     const contribution = Math.round(score * weight / 100);
-    const pct = score;
     return `<tr>
       <td class="signal-label">${label}</td>
       <td class="signal-bar-cell">
         <div class="signal-bar-bg">
-          <div class="signal-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+          <div class="signal-bar-fill" style="width:${score}%;background:${barColor}"></div>
         </div>
       </td>
       <td class="signal-score">${contribution}/${weight}</td>
@@ -175,7 +177,8 @@ export function renderSessionHealthHtml(health: SessionHealth | null): string {
       ? '<span class="badge badge-warn">Switch model</span>'
       : '<span class="badge badge-ok">Continue</span>';
 
-  const costStr = `~$${(recommendation.estimatedCostPerTurn * 100).toFixed(2)}¢/turn`;
+  const costStr = formatCostPerTurn(recommendation.estimatedCostPerTurn);
+  const trendStr = formatTrend(trend, history);
 
   return `
 <div class="session-health">
@@ -189,8 +192,11 @@ export function renderSessionHealthHtml(health: SessionHealth | null): string {
       <span class="score-num" style="color:${barColor}">${rotScore}</span>
       <span class="score-denom">/ 100</span>
       <span class="severity-badge severity-${severity}">${severityLabel}</span>
+      <span class="health-trend trend-${trend}">${trendStr}</span>
     </div>
   </div>
+
+  ${renderTrajectory(history, amberCrossedTurn, severity)}
 
   <div class="health-signals">
     <div class="section-title">Signal Breakdown</div>
@@ -199,11 +205,19 @@ export function renderSessionHealthHtml(health: SessionHealth | null): string {
     </table>
   </div>
 
+  <div class="health-driver">
+    <div class="section-title">What's driving it</div>
+    <div class="driver-card">
+      <div class="driver-signal">${escapeHtml(primaryDriver.signal)}</div>
+      <div class="driver-hint">${escapeHtml(primaryDriver.hint)}</div>
+    </div>
+  </div>
+
   <div class="health-recommendation">
     <div class="section-title">Model Recommendation</div>
     <div class="rec-card">
       <div class="rec-model">${recommendation.displayName} ${actionBadge}</div>
-      <div class="rec-reason">${recommendation.reason}</div>
+      <div class="rec-reason">${escapeHtml(recommendation.reason)}</div>
       <div class="rec-cost muted">${costStr}</div>
     </div>
   </div>
@@ -216,6 +230,73 @@ export function renderSessionHealthHtml(health: SessionHealth | null): string {
   </div>
 
 </div>`;
+}
+
+// ─── Render helpers ─────────────────────────────────────────────────────────
+
+function severityHex(s: RotSeverity): string {
+  return s === 'critical' ? '#ff6b6b' : s === 'amber' ? '#ffd93d' : '#6bcb77';
+}
+
+/** USD/turn → "$0.12/turn" for cents-and-up, "0.64¢/turn" for sub-cent. */
+function formatCostPerTurn(usd: number): string {
+  if (usd >= 0.01) { return `~$${usd.toFixed(2)}/turn`; }
+  return `~${(usd * 100).toFixed(2)}¢/turn`;
+}
+
+function formatTrend(trend: 'rising' | 'stable' | 'falling', history: { turn: number; score: number }[]): string {
+  if (history.length < 2) { return ''; }
+  const delta = history[history.length - 1].score - history[Math.max(0, history.length - 4)].score;
+  const sign = delta > 0 ? '+' : '';
+  if (trend === 'rising')  { return `▲ rising (${sign}${delta} pts)`; }
+  if (trend === 'falling') { return `▼ improving (${sign}${delta} pts)`; }
+  return '◆ stable';
+}
+
+/**
+ * Inline-SVG sparkline of the score-per-turn trajectory — the "getting dumber
+ * over time" view. Marks the turn where the score first crossed into amber.
+ */
+function renderTrajectory(
+  history: { turn: number; score: number }[],
+  amberCrossedTurn: number | null,
+  severity: RotSeverity,
+): string {
+  if (history.length < 2) { return ''; }
+  const W = 280, H = 48, pad = 4;
+  const n = history.length;
+  const x = (i: number) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (score: number) => pad + (1 - score / 100) * (H - 2 * pad);
+  const pts = history.map((p, i) => `${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ');
+  const color = severityHex(severity);
+
+  let amberMark = '';
+  if (amberCrossedTurn !== null) {
+    const idx = history.findIndex(p => p.turn === amberCrossedTurn);
+    if (idx >= 0) {
+      amberMark = `<circle cx="${x(idx).toFixed(1)}" cy="${y(history[idx].score).toFixed(1)}" r="3" fill="#ffd93d" />`;
+    }
+  }
+  const amberCaption = amberCrossedTurn !== null
+    ? `<span class="muted">crossed amber at turn ${amberCrossedTurn}</span>`
+    : `<span class="muted">healthy across all ${n} turns</span>`;
+
+  return `
+  <div class="health-trajectory">
+    <div class="section-title">Trajectory</div>
+    <svg viewBox="0 0 ${W} ${H}" class="trajectory-svg" preserveAspectRatio="none">
+      <line x1="${pad}" y1="${y(35).toFixed(1)}" x2="${W - pad}" y2="${y(35).toFixed(1)}"
+            stroke="#ffd93d" stroke-width="0.5" stroke-dasharray="3 3" opacity="0.5" />
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" />
+      ${amberMark}
+    </svg>
+    <div class="trajectory-caption">${amberCaption}</div>
+  </div>`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
 function formatTokens(n: number): string {
